@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>資產配置與走勢追蹤</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600;6..72,700&family=Inter:wght@400;500;600;700&display=swap');
+
+  :root{
+    --bg:#0A0E17;
+    --surface:#131926;
+    --surface-2:#171F30;
+    --border:#232B3D;
+    --text:#E8EAED;
+    --text-dim:#8B93A7;
+    --gain:#E5484D;   /* TW convention: red = up / profit */
+    --loss:#2FB380;   /* TW convention: green = down / loss */
+    --accent:#C9A227;
+    --equity:#C9A227;
+    --bond:#5B8DEF;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    font-variant-numeric:tabular-nums;
+    padding:28px 16px 60px;
+  }
+  .wrap{max-width:920px;margin:0 auto;}
+
+  h1{
+    font-family:'Newsreader',serif;
+    font-weight:500;
+    font-size:26px;
+    margin:0 0 4px;
+    letter-spacing:0.2px;
+  }
+  .subtitle{color:var(--text-dim);font-size:13.5px;margin:0 0 28px;}
+
+  .hero{
+    background:linear-gradient(160deg,var(--surface) 0%, var(--surface-2) 100%);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:26px 24px;
+    margin-bottom:20px;
+  }
+  .hero-label{color:var(--text-dim);font-size:13px;margin-bottom:6px;}
+  .hero-value{
+    font-family:'Newsreader',serif;
+    font-size:44px;
+    font-weight:600;
+    line-height:1.1;
+  }
+  .hero-row{display:flex;gap:32px;flex-wrap:wrap;margin-top:16px;}
+  .hero-stat{font-size:13.5px;color:var(--text-dim);}
+  .hero-stat b{color:var(--text);font-weight:600;display:block;font-size:16px;margin-top:2px;}
+  .delta-up{color:var(--gain);}
+  .delta-down{color:var(--loss);}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
+  @media (max-width:720px){.grid2{grid-template-columns:1fr;}}
+
+  .card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:20px;
+  }
+  .card-title{font-size:14.5px;font-weight:600;margin:0 0 14px;color:var(--text);}
+  .card-sub{font-size:12px;color:var(--text-dim);margin:-10px 0 14px;}
+
+  .legend-row{display:flex;gap:18px;margin-top:14px;font-size:12.5px;color:var(--text-dim);flex-wrap:wrap;}
+  .legend-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;}
+
+  .fx-row{display:flex;align-items:center;gap:10px;margin-bottom:16px;font-size:13px;color:var(--text-dim);}
+  .fx-row input{
+    width:80px;background:var(--surface-2);border:1px solid var(--border);
+    color:var(--text);border-radius:7px;padding:5px 8px;font-size:13px;font-family:inherit;
+  }
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{
+    text-align:right;color:var(--text-dim);font-weight:500;font-size:11.5px;
+    padding:6px 8px;border-bottom:1px solid var(--border);
+  }
+  th:first-child,td:first-child{text-align:left;}
+  td{padding:8px 8px;border-bottom:1px solid var(--border);}
+  tr:last-child td{border-bottom:none;}
+  .name{font-weight:500;}
+  .code{color:var(--text-dim);font-size:11px;display:block;}
+  .tag{
+    display:inline-block;font-size:10px;padding:1px 6px;border-radius:5px;margin-left:6px;
+    vertical-align:middle;font-weight:600;
+  }
+  .tag-equity{background:rgba(201,162,39,0.15);color:var(--equity);}
+  .tag-bond{background:rgba(91,141,239,0.15);color:var(--bond);}
+  input.price-input{
+    width:88px;background:var(--surface-2);border:1px solid var(--border);
+    color:var(--text);border-radius:6px;padding:4px 6px;font-size:13px;
+    text-align:right;font-family:inherit;
+  }
+  input.price-input:focus{outline:1px solid var(--accent);}
+
+  .section-heading{
+    font-size:13px;color:var(--text-dim);margin:22px 0 8px;font-weight:600;
+  }
+  .section-heading:first-child{margin-top:0;}
+
+  .btnrow{display:flex;gap:10px;align-items:center;margin-top:18px;flex-wrap:wrap;}
+  button{
+    font-family:inherit;font-size:13.5px;font-weight:600;
+    border-radius:8px;padding:10px 18px;cursor:pointer;border:none;
+  }
+  .btn-primary{background:var(--accent);color:#191305;}
+  .btn-primary:hover{background:#d8b12e;}
+  .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text-dim);}
+  .btn-ghost:hover{color:var(--text);border-color:var(--text-dim);}
+  .save-msg{font-size:12.5px;color:var(--accent);opacity:0;transition:opacity .3s;}
+  .save-msg.show{opacity:1;}
+
+  .history-list{max-height:220px;overflow-y:auto;font-size:13px;}
+  .history-row{
+    display:flex;justify-content:space-between;padding:8px 4px;
+    border-bottom:1px solid var(--border);
+  }
+  .history-row:last-child{border-bottom:none;}
+  .history-date{color:var(--text-dim);}
+  .auto-badge{font-size:10px;color:var(--text-dim);margin-left:6px;}
+  .empty-note{color:var(--text-dim);font-size:12.5px;padding:12px 0;}
+
+  .note{
+    background:var(--surface-2);border:1px solid var(--border);
+    border-radius:10px;padding:14px 16px;font-size:12.5px;color:var(--text-dim);
+    line-height:1.6;margin-top:20px;
+  }
+  .note b{color:var(--text);}
+
+  canvas{max-width:100%;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>資產配置與走勢</h1>
+  <p class="subtitle">台股 + 美股持倉整合檢視 · 每週五記錄一次快照，累積長期走勢</p>
+
+  <div class="hero">
+    <div class="hero-label">總資產淨值（換算新台幣）</div>
+    <div class="hero-value" id="heroTotal">—</div>
+    <div class="hero-row">
+      <div class="hero-stat">較上次週快照<b id="deltaSinceLast">—</b></div>
+      <div class="hero-stat">未實現損益<b id="totalPnl">—</b></div>
+      <div class="hero-stat">已記錄週數<b id="snapshotCount">0</b></div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">資產配置 — 股票 vs 債券</div>
+      <canvas id="allocChart" height="220"></canvas>
+      <div class="legend-row">
+        <span><span class="legend-dot" style="background:var(--equity);"></span>股票 / 股票型 ETF</span>
+        <span><span class="legend-dot" style="background:var(--bond);"></span>債券 / 債券型 ETF</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">資產走勢（每週五）</div>
+      <div class="card-sub" id="trendSub">尚無歷史快照</div>
+      <canvas id="trendChart" height="220"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">持倉明細</div>
+    <div class="fx-row">
+      美元兌台幣匯率
+      <input type="number" id="fxRate" value="31.5" step="0.01">
+      <span style="color:var(--text-dim);font-size:12px;">（用於將美股帳戶換算為台幣，請依實際匯率調整）</span>
+    </div>
+
+    <div class="section-heading">台股帳戶（新台幣）</div>
+    <table>
+      <thead><tr><th>標的</th><th>股數</th><th>現價</th><th>市值</th><th>損益</th></tr></thead>
+      <tbody id="twBody"></tbody>
+    </table>
+
+    <div class="section-heading">美股帳戶（美元）</div>
+    <table>
+      <thead><tr><th>標的</th><th>股數/口數</th><th>現價</th><th>市值</th><th>損益</th></tr></thead>
+      <tbody id="usBody"></tbody>
+    </table>
+
+    <div class="btnrow">
+      <button class="btn-primary" id="saveBtn">手動記錄本週快照</button>
+      <button class="btn-ghost" id="resetBtn">還原為截圖原始數值</button>
+      <span class="save-msg" id="saveMsg">已記錄本週快照</span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:20px;">
+    <div class="card-title">週快照紀錄</div>
+    <div class="history-list" id="historyList">
+      <div class="empty-note">尚未記錄任何快照</div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>關於「每週五晚上 10 點自動記錄」：</b>這個頁面沒辦法在您沒打開它的時候，於背景自己醒來記錄——
+    它執行在瀏覽器的畫面裡，沒有排程或推播能力，也連不到券商即時報價。能做到最接近的方式是：
+    <b>只要您在週五晚上 10 點之後（或之後任何一天）打開這個頁面，它會自動把當下表格裡的現價換算成當週的快照存起來</b>，
+    不用手動按按鈕；同一週只會記一次。因此建議您養成「每週五晚上打開這裡、把現價更新成當天收盤價」的習慣，
+    這樣記錄的走勢才會準確。如果您那週忘了打開，可以用上面「手動記錄本週快照」補記。
+  </div>
+
+</div>
+
+<script>
+const TWD = 'TWD', USD = 'USD';
+
+// Initial holdings, transcribed from the uploaded screenshots.
+// cost = 總成本 (original), qty = 股數/單位, price = 現價 (derived from 市值/qty, editable going forward)
+// category: 'equity' (股票/股票型ETF) or 'bond' (債券/債券型ETF)
+let state = {
+  fx: 31.5,
+  tw: [
+    { name:'元大台灣50', code:'0050',      qty:49533,  cost:2111734, price:106.69,  category:'equity' },
+    { name:'國泰20年美債', code:'00687B',  qty:32390,  cost:892924,  price:27.15,   category:'bond'   },
+    { name:'群益ESG投等債20+', code:'00937B', qty:10510, cost:135243, price:14.32,  category:'bond'   },
+    { name:'凱基台灣TOP50', code:'009816', qty:12648,  cost:176221,  price:15.55,   category:'equity' },
+    { name:'台積電', code:'2330',          qty:2200,   cost:1189723, price:2409.29, category:'equity' },
+    { name:'永豐金', code:'2890',          qty:39200,  cost:629590,  price:39.62,   category:'equity' },
+    { name:'聯亞', code:'3081',            qty:750,    cost:1425274, price:3290.40, category:'equity' },
+  ],
+  us: [
+    { name:'NVDA',      code:'',                 qty:0.00218, cost:0.28,    price:217.89, category:'equity' },
+    { name:'SMCI',      code:'',                 qty:400,     cost:17773,   price:37.08,  category:'equity' },
+    { name:'SMCX',      code:'',                 qty:5400,    cost:120554,  price:11.81,  category:'equity' },
+    { name:'TLT',       code:'',                 qty:0.73778, cost:62.81,   price:82.94,  category:'bond'   },
+    { name:'TLT Call',  code:'10/16/26 $85 x3',  qty:3,       cost:182.06,  price:45.00,  category:'bond'   },
+    { name:'VT',        code:'',                 qty:350,     cost:49210,   price:161.12, category:'equity' },
+  ]
+};
+const INITIAL_STATE = JSON.parse(JSON.stringify(state));
+
+let allocChart, trendChart;
+const fmt = n => Math.round(n).toLocaleString('en-US');
+
+function computeTotals(){
+  const fx = state.fx;
+  let twValue=0, twCost=0, usValueUSD=0, usCostUSD=0;
+  let equityTWD=0, bondTWD=0;
+  state.tw.forEach(h=>{
+    h.value = h.qty*h.price; twValue+=h.value; twCost+=h.cost;
+    if(h.category==='bond') bondTWD += h.value; else equityTWD += h.value;
+  });
+  state.us.forEach(h=>{
+    h.value = h.qty*h.price; usValueUSD+=h.value; usCostUSD+=h.cost;
+    const valueTWD = h.value*fx;
+    if(h.category==='bond') bondTWD += valueTWD; else equityTWD += valueTWD;
+  });
+  const usValueTWD = usValueUSD*fx;
+  const usCostTWD = usCostUSD*fx;
+  const totalValue = twValue + usValueTWD;
+  const totalCost = twCost + usCostTWD;
+  return { twValue, twCost, usValueUSD, usCostUSD, usValueTWD, usCostTWD, totalValue, totalCost, equityTWD, bondTWD };
+}
+
+function renderTable(bodyId, holdings, currencySymbol){
+  const body = document.getElementById(bodyId);
+  body.innerHTML = '';
+  holdings.forEach((h, idx)=>{
+    const pnl = h.value - h.cost;
+    const pnlPct = h.cost ? (pnl/h.cost*100) : 0;
+    const pnlClass = pnl >= 0 ? 'delta-up' : 'delta-down';
+    const tagClass = h.category==='bond' ? 'tag-bond' : 'tag-equity';
+    const tagLabel = h.category==='bond' ? '債券' : '股票';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="name">${h.name}</span><span class="tag ${tagClass}">${tagLabel}</span>${h.code?`<span class="code">${h.code}</span>`:''}</td>
+      <td style="text-align:right;">${h.qty < 1 ? h.qty : fmt(h.qty)}</td>
+      <td style="text-align:right;"><input class="price-input" type="number" step="0.01" value="${h.price}" data-body="${bodyId}" data-idx="${idx}"></td>
+      <td style="text-align:right;">${currencySymbol}${fmt(h.value)}</td>
+      <td style="text-align:right;" class="${pnlClass}">${pnl>=0?'+':''}${fmt(pnl)} (${pnlPct.toFixed(1)}%)</td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+function renderHero(totals, lastSnapshot){
+  document.getElementById('heroTotal').textContent = 'NT$ ' + fmt(totals.totalValue);
+  const pnl = totals.totalValue - totals.totalCost;
+  const pnlEl = document.getElementById('totalPnl');
+  pnlEl.textContent = (pnl>=0?'+':'') + 'NT$' + fmt(pnl);
+  pnlEl.className = pnl>=0 ? 'delta-up':'delta-down';
+
+  const deltaEl = document.getElementById('deltaSinceLast');
+  if(lastSnapshot){
+    const d = totals.totalValue - lastSnapshot.totalValue;
+    deltaEl.textContent = (d>=0?'+':'') + 'NT$' + fmt(d);
+    deltaEl.className = d>=0 ? 'delta-up':'delta-down';
+  } else {
+    deltaEl.textContent = '尚無快照可比較';
+    deltaEl.className = '';
+  }
+}
+
+function renderAllocChart(totals){
+  const ctx = document.getElementById('allocChart');
+  if(allocChart) allocChart.destroy();
+  allocChart = new Chart(ctx, {
+    type:'pie',
+    data:{
+      labels:['股票 / 股票型 ETF','債券 / 債券型 ETF'],
+      datasets:[{
+        data:[totals.equityTWD, totals.bondTWD],
+        backgroundColor:['#C9A227','#5B8DEF'],
+        borderColor:'#131926',
+        borderWidth:2
+      }]
+    },
+    options:{
+      plugins:{
+        legend:{ display:false },
+        tooltip:{
+          callbacks:{
+            label: (ctx)=>{
+              const pct = (ctx.parsed / (totals.equityTWD+totals.bondTWD) * 100).toFixed(1);
+              return `${ctx.label}: NT$${fmt(ctx.parsed)} (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function renderTrendChart(history){
+  const ctx = document.getElementById('trendChart');
+  const sub = document.getElementById('trendSub');
+  if(!history.length){
+    sub.textContent = '尚無歷史快照 — 週五記錄後開始累積走勢';
+  } else {
+    sub.textContent = `${history.length} 筆週快照，最早 ${history[0].date}`;
+  }
+  if(trendChart) trendChart.destroy();
+  trendChart = new Chart(ctx, {
+    type:'line',
+    data:{
+      labels: history.map(s=>s.date),
+      datasets:[{
+        label:'總資產淨值 (NTD)',
+        data: history.map(s=>s.totalValue),
+        borderColor:'#C9A227',
+        backgroundColor:'rgba(201,162,39,0.12)',
+        fill:true, tension:0.25, pointRadius:3, pointBackgroundColor:'#C9A227'
+      }]
+    },
+    options:{
+      plugins:{ legend:{ display:false } },
+      scales:{
+        x:{ ticks:{ color:'#8B93A7', font:{size:10} }, grid:{ color:'#232B3D' } },
+        y:{ ticks:{ color:'#8B93A7', font:{size:10}, callback:v=>fmt(v) }, grid:{ color:'#232B3D' } }
+      }
+    }
+  });
+}
+
+function renderHistory(history){
+  const el = document.getElementById('historyList');
+  document.getElementById('snapshotCount').textContent = history.length;
+  if(!history.length){
+    el.innerHTML = '<div class="empty-note">尚未記錄任何快照</div>';
+    return;
+  }
+  el.innerHTML = '';
+  [...history].reverse().forEach(s=>{
+    const row = document.createElement('div');
+    row.className = 'history-row';
+    row.innerHTML = `<span class="history-date">${s.date}${s.auto?'<span class="auto-badge">自動記錄</span>':''}</span><span>NT$ ${fmt(s.totalValue)}</span>`;
+    el.appendChild(row);
+  });
+}
+
+// NOTE: this standalone build uses plain browser localStorage instead of the
+// Claude-artifact window.storage API, so it works on any static host (GitHub
+// Pages, Netlify, Vercel...). Data is saved per-browser/device only — it will
+// NOT sync between your phone and computer, and clearing browser data erases it.
+async function loadHistory(){
+  try{
+    const raw = localStorage.getItem('asset_snapshots_weekly');
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){
+    return [];
+  }
+}
+async function saveHistory(history){
+  try{
+    localStorage.setItem('asset_snapshots_weekly', JSON.stringify(history));
+  }catch(e){ console.error('storage set failed', e); }
+}
+async function loadState(){
+  try{
+    const raw = localStorage.getItem('asset_state');
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){
+    return null;
+  }
+}
+async function saveState(){
+  try{
+    localStorage.setItem('asset_state', JSON.stringify(state));
+  }catch(e){ console.error('storage set failed', e); }
+}
+
+// Returns the ISO date string (YYYY-MM-DD) of the most recent Friday at/after 22:00
+// local time that has already passed relative to `now`.
+function mostRecentFriday10pm(now){
+  const d = new Date(now);
+  d.setSeconds(0,0);
+  // Find this week's Friday (day 5, Sun=0..Sat=6)
+  const day = d.getDay();
+  let diffToFriday = day - 5; // positive if we're past Friday in the week, negative if before
+  const candidate = new Date(d);
+  candidate.setDate(d.getDate() - diffToFriday);
+  candidate.setHours(22,0,0,0);
+  if(candidate > now){
+    // this week's Friday 22:00 hasn't happened yet -> use previous week's Friday
+    candidate.setDate(candidate.getDate() - 7);
+  }
+  return candidate;
+}
+function toDateStr(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
+let history = [];
+
+async function fullRender(){
+  const totals = computeTotals();
+  const lastSnapshot = history.length ? history[history.length-1] : null;
+  renderTable('twBody', state.tw, 'NT$');
+  renderTable('usBody', state.us, '$');
+  renderHero(totals, lastSnapshot);
+  renderAllocChart(totals);
+  renderTrendChart(history);
+  renderHistory(history);
+}
+
+document.addEventListener('input', (e)=>{
+  if(e.target.id === 'fxRate'){
+    state.fx = parseFloat(e.target.value) || 0;
+    saveState();
+    fullRender();
+  }
+  if(e.target.classList.contains('price-input')){
+    const bodyId = e.target.dataset.body;
+    const idx = parseInt(e.target.dataset.idx);
+    const arr = bodyId === 'twBody' ? state.tw : state.us;
+    arr[idx].price = parseFloat(e.target.value) || 0;
+    saveState();
+    fullRender();
+  }
+});
+
+async function recordSnapshot(dateStr, auto){
+  const totals = computeTotals();
+  const idx = history.findIndex(s=>s.date === dateStr);
+  const snapshot = { date: dateStr, totalValue: totals.totalValue, totalCost: totals.totalCost, auto: !!auto };
+  if(idx >= 0){ history[idx] = snapshot; } else { history.push(snapshot); }
+  history.sort((a,b)=> a.date.localeCompare(b.date));
+  await saveHistory(history);
+}
+
+document.getElementById('saveBtn').addEventListener('click', async ()=>{
+  const fridayDate = toDateStr(mostRecentFriday10pm(new Date()));
+  await recordSnapshot(fridayDate, false);
+  await saveState();
+  await fullRender();
+  const msg = document.getElementById('saveMsg');
+  msg.classList.add('show');
+  setTimeout(()=>msg.classList.remove('show'), 1800);
+});
+
+document.getElementById('resetBtn').addEventListener('click', async ()=>{
+  state = JSON.parse(JSON.stringify(INITIAL_STATE));
+  document.getElementById('fxRate').value = state.fx;
+  await saveState();
+  await fullRender();
+});
+
+(async function init(){
+  const savedState = await loadState();
+  if(savedState) state = savedState;
+  document.getElementById('fxRate').value = state.fx;
+  history = await loadHistory();
+
+  // Auto weekly snapshot: if the most recent Friday 22:00 has passed and
+  // hasn't been recorded yet, log it now using the currently-set prices.
+  const now = new Date();
+  const targetFriday = mostRecentFriday10pm(now);
+  const targetDateStr = toDateStr(targetFriday);
+  const alreadyRecorded = history.some(s=>s.date === targetDateStr);
+  if(now >= targetFriday && !alreadyRecorded){
+    await recordSnapshot(targetDateStr, true);
+    history = await loadHistory();
+  }
+
+  await fullRender();
+})();
+</script>
+</body>
+</html>
