@@ -161,7 +161,9 @@
   <div class="grid2">
     <div class="card">
       <div class="card-title">資產配置 — 股票 vs 債券</div>
-      <canvas id="allocChart" height="220"></canvas>
+      <div style="position:relative;height:240px;">
+        <canvas id="allocChart"></canvas>
+      </div>
       <div class="legend-row">
         <span><span class="legend-dot" style="background:var(--equity);"></span>股票 / 股票型 ETF</span>
         <span><span class="legend-dot" style="background:var(--bond);"></span>債券 / 債券型 ETF</span>
@@ -170,7 +172,9 @@
     <div class="card">
       <div class="card-title">資產走勢（每週五）</div>
       <div class="card-sub" id="trendSub">尚無歷史快照</div>
-      <canvas id="trendChart" height="220"></canvas>
+      <div style="position:relative;height:240px;">
+        <canvas id="trendChart"></canvas>
+      </div>
     </div>
   </div>
 
@@ -323,6 +327,8 @@ function renderAllocChart(totals){
       }]
     },
     options:{
+      responsive:true,
+      maintainAspectRatio:false,
       plugins:{
         legend:{ display:false },
         tooltip:{
@@ -360,6 +366,8 @@ function renderTrendChart(history){
       }]
     },
     options:{
+      responsive:true,
+      maintainAspectRatio:false,
       plugins:{ legend:{ display:false } },
       scales:{
         x:{ ticks:{ color:'#8B93A7', font:{size:10} }, grid:{ color:'#232B3D' } },
@@ -496,8 +504,24 @@ document.getElementById('resetBtn').addEventListener('click', async ()=>{
 });
 
 (async function init(){
+  // Merge only the user-editable fields (fx rate, per-holding price) from any
+  // previously saved data onto the current INITIAL_STATE. This avoids stale
+  // saved data from an older version of this page (e.g. missing the
+  // stock/bond `category` field) from overwriting today's structure.
+  state = JSON.parse(JSON.stringify(INITIAL_STATE));
   const savedState = await loadState();
-  if(savedState) state = savedState;
+  if(savedState){
+    if(typeof savedState.fx === 'number') state.fx = savedState.fx;
+    ['tw','us'].forEach(key=>{
+      if(!Array.isArray(savedState[key])) return;
+      state[key].forEach((h, idx)=>{
+        const saved = savedState[key][idx];
+        if(saved && saved.name === h.name && typeof saved.price === 'number'){
+          h.price = saved.price;
+        }
+      });
+    });
+  }
   document.getElementById('fxRate').value = state.fx;
   history = await loadHistory();
 
