@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>資產配置與走勢追蹤</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600;6..72,700&family=Inter:wght@400;500;600;700&display=swap');
 
@@ -161,9 +160,7 @@
   <div class="grid2">
     <div class="card">
       <div class="card-title">資產配置 — 股票 vs 債券</div>
-      <div style="position:relative;height:240px;">
-        <canvas id="allocChart"></canvas>
-      </div>
+      <div style="position:relative;height:240px;" id="allocChartWrap"></div>
       <div class="legend-row">
         <span><span class="legend-dot" style="background:var(--equity);"></span>股票 / 股票型 ETF</span>
         <span><span class="legend-dot" style="background:var(--bond);"></span>債券 / 債券型 ETF</span>
@@ -184,6 +181,11 @@
       美元兌台幣匯率
       <input type="number" id="fxRate" value="31.5" step="0.01">
       <span style="color:var(--text-dim);font-size:12px;">（用於將美股帳戶換算為台幣，請依實際匯率調整）</span>
+    </div>
+
+    <div class="btnrow" style="margin-top:0;margin-bottom:18px;">
+      <button class="btn-primary" id="refreshBtn">更新最新市價</button>
+      <span class="save-msg show" id="refreshStatus" style="color:var(--text-dim);">開啟頁面時會自動嘗試更新一次</span>
     </div>
 
     <div class="section-heading">台股帳戶（新台幣）</div>
@@ -244,7 +246,7 @@ let state = {
     { name:'SMCI',      code:'',                 qty:400,     cost:17773,   price:37.08,  category:'equity' },
     { name:'SMCX',      code:'',                 qty:5400,    cost:120554,  price:11.81,  category:'equity' },
     { name:'TLT',       code:'',                 qty:0.73778, cost:62.81,   price:82.94,  category:'bond'   },
-    { name:'TLT Call',  code:'10/16/26 $85 x3',  qty:3,       cost:182.06,  price:45.00,  category:'bond'   },
+    { name:'TLT Call',  code:'10/16/26 $85 x3',  qty:3,       cost:182.06,  price:45.00,  category:'bond', optionContract:true },
     { name:'VT',        code:'',                 qty:350,     cost:49210,   price:161.12, category:'equity' },
   ]
 };
@@ -486,6 +488,83 @@ async function recordSnapshot(dateStr, auto){
   await saveHistory(history);
 }
 
+// --- Live price fetching (best-effort; relies on free/public sources that
+// may rate-limit or go offline without notice — manual price entry always
+// remains available as a fallback if these fail) ---
+
+async function fetchTwPrices(){
+  const codes = state.tw.map(h=>h.code);
+  const query = codes.map(c=>`tse_${c}.tw`).concat(codes.map(c=>`otc_${c}.tw`)).join('|');
+  const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(query)}&json=1&delay=0`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('回應錯誤 ' + res.status);
+  const data = await res.json();
+  const list = data.msgArray || [];
+  const priceByCode = {};
+  list.forEach(item=>{
+    const code = item.c;
+    const raw = (item.z && item.z !== '-') ? item.z : item.y;
+    const price = raw ? parseFloat(raw) : null;
+    if(price && !isNaN(price) && !(code in priceByCode)) priceByCode[code] = price;
+  });
+  let updated = 0;
+  state.tw.forEach(h=>{
+    if(priceByCode[h.code] != null){ h.price = priceByCode[h.code]; updated++; }
+  });
+  return updated;
+}
+
+async function fetchOneUsQuote(ticker){
+  const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`;
+  const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`;
+  const res = await fetch(proxied);
+  if(!res.ok) throw new Error('回應錯誤 ' + res.status);
+  const data = await res.json();
+  const price = data && data.chart && data.chart.result && data.chart.result[0]
+    ? data.chart.result[0].meta.regularMarketPrice : undefined;
+  if(typeof price !== 'number') throw new Error('無法解析價格');
+  return price;
+}
+
+async function fetchUsPrices(){
+  let updated = 0;
+  const failed = [];
+  for(const h of state.us){
+    if(h.optionContract) continue;
+    try{
+      h.price = await fetchOneUsQuote(h.name);
+      updated++;
+    }catch(e){
+      failed.push(h.name);
+    }
+  }
+  return { updated, failed };
+}
+
+async function refreshLivePrices(){
+  const statusEl = document.getElementById('refreshStatus');
+  statusEl.textContent = '更新中…';
+  let twMsg, usMsg;
+  try{
+    const n = await fetchTwPrices();
+    twMsg = `台股已更新 ${n}/${state.tw.length} 檔`;
+  }catch(e){
+    twMsg = '台股更新失敗（來源目前無法連線）';
+  }
+  try{
+    const { updated, failed } = await fetchUsPrices();
+    usMsg = `美股已更新 ${updated} 檔` + (failed.length ? `，失敗：${failed.join('、')}` : '');
+  }catch(e){
+    usMsg = '美股更新失敗（來源目前無法連線）';
+  }
+  await saveState();
+  await fullRender();
+  const now = new Date();
+  statusEl.textContent = `${twMsg}；${usMsg}（${now.toLocaleTimeString('zh-TW')} 更新，未抓到的可自行手動輸入）`;
+}
+
+document.getElementById('refreshBtn').addEventListener('click', refreshLivePrices);
+
 document.getElementById('saveBtn').addEventListener('click', async ()=>{
   const fridayDate = toDateStr(mostRecentFriday10pm(new Date()));
   await recordSnapshot(fridayDate, false);
@@ -537,6 +616,7 @@ document.getElementById('resetBtn').addEventListener('click', async ()=>{
   }
 
   await fullRender();
+  refreshLivePrices();
 })();
 </script>
 </body>
