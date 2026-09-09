@@ -155,7 +155,7 @@
 <div class="wrap">
 
   <h1>資產配置與走勢</h1>
-  <p class="subtitle">台股 + 美股持倉整合檢視 · 精準狀態重構版</p>
+  <p class="subtitle">台股 + 美股持倉整合檢視 · 狀態完全同步修正版</p>
 
   <div class="hero">
     <div class="hero-label">總資產淨值（換算新台幣）</div>
@@ -259,7 +259,7 @@
       <button class="btn-primary" id="updateAndSaveAllBtn" type="button">💾 儲存所有修改</button>
       <button class="btn-ghost" id="snapshotBtn" type="button">手動記錄本週快照</button>
       <button class="btn-ghost" id="resetBtn" type="button">還原預設資料</button>
-      <span class="save-msg" id="saveMsg" style="opacity:0;transition:opacity .3s;">已成功儲存修改！</span>
+      <span class="save-msg" id="saveMsg" style="opacity:0;transition:opacity .3s;">已成功儲存至瀏覽器！</span>
     </div>
   </div>
 
@@ -437,19 +437,20 @@ function renderHistory(){
 }
 
 function saveStateToStorage(){ 
-  localStorage.setItem('asset_state', JSON.stringify(state)); 
-  localStorage.setItem('asset_history', JSON.stringify(history)); 
+  localStorage.setItem('asset_state_v2', JSON.stringify(state)); 
+  localStorage.setItem('asset_history_v2', JSON.stringify(history)); 
 }
 
 function loadState(){
   try{ 
-    const rawState = localStorage.getItem('asset_state');
-    const rawHist = localStorage.getItem('asset_history');
+    const rawState = localStorage.getItem('asset_state_v2');
+    const rawHist = localStorage.getItem('asset_history_v2');
     if(rawState) state = JSON.parse(rawState);
     if(rawHist) history = JSON.parse(rawHist);
   }catch(e){}
 }
 
+// 動態綁定所有修改
 document.addEventListener('input', (e)=>{
   const target = e.target;
   const market = target.dataset.market;
@@ -466,6 +467,26 @@ document.addEventListener('input', (e)=>{
     state.fx = parseFloat(target.value) || 31.5;
     updateGlobalDisplaysOnly();
   }
+});
+
+// 核心修復：點擊儲存按鈕時，僅同步寫入 localStorage，絕不觸發 fullRender 覆蓋 DOM
+document.getElementById('updateAndSaveAllBtn').addEventListener('click', ()=>{
+  // 強制最後一次掃描 DOM inputs 確保狀態 100% 同步
+  document.querySelectorAll('input[data-market]').forEach(input => {
+    const market = input.dataset.market;
+    const id = input.dataset.id;
+    const field = input.dataset.field;
+    const item = state[market].find(x => x.id === id);
+    if(item){
+      item[field] = parseFloat(input.value) || 0;
+    }
+  });
+
+  saveStateToStorage();
+  
+  const msg = document.getElementById('saveMsg');
+  msg.style.opacity = 1;
+  setTimeout(()=>msg.style.opacity = 0, 2000);
 });
 
 document.getElementById('refreshBtn').addEventListener('click', async ()=>{
@@ -556,20 +577,12 @@ document.getElementById('snapshotBtn').addEventListener('click', ()=>{
   alert('已成功新增本週快照記錄！');
 });
 
-document.getElementById('updateAndSaveAllBtn').addEventListener('click', ()=>{
-  saveStateToStorage();
-  fullRender();
-  const msg = document.getElementById('saveMsg');
-  msg.style.opacity = 1;
-  setTimeout(()=>msg.style.opacity = 0, 2000);
-});
-
 document.getElementById('resetBtn').addEventListener('click', ()=>{
   if(confirm('確定要還原成預設資料嗎？')){
     state = JSON.parse(JSON.stringify(INITIAL_STATE));
     history = [];
-    localStorage.removeItem('asset_state');
-    localStorage.removeItem('asset_history');
+    localStorage.removeItem('asset_state_v2');
+    localStorage.removeItem('asset_history_v2');
     fullRender();
   }
 });
