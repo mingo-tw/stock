@@ -128,7 +128,6 @@
     border-radius:6px;padding:6px 8px;font-size:12.5px;font-family:inherit;
   }
   .add-row input[type=text]{width:90px;}
-  .add-row input[type=number]{width:85px;}
   .add-row label{color:var(--text-dim);font-size:11px;display:flex;flex-direction:column;gap:3px;}
 
   .btnrow{display:flex;gap:10px;align-items:center;margin-top:18px;flex-wrap:wrap;}
@@ -156,7 +155,7 @@
 <div class="wrap">
 
   <h1>資產配置與走勢</h1>
-  <p class="subtitle">台股 + 美股持倉整合檢視 · 自動填入隔離修正版</p>
+  <p class="subtitle">台股 + 美股持倉整合檢視 · 強力防自動填入版</p>
 
   <div class="hero">
     <div class="hero-label">總資產淨值（換算新台幣）</div>
@@ -194,7 +193,7 @@
     
     <div class="fx-row">
       美元兌台幣匯率
-      <input type="number" id="fxRate" value="31.5" step="0.01" autocomplete="off" data-lpignore="true">
+      <input type="text" inputmode="decimal" id="fxRate" value="31.5" autocomplete="off" data-lpignore="true">
       <span style="color:var(--text-dim);font-size:12px;">（用於將美股帳戶換算為台幣）</span>
     </div>
 
@@ -221,9 +220,9 @@
     <div class="add-row">
       <label>代號<input type="text" id="twAddCode" placeholder="0050" autocomplete="off"></label>
       <label>名稱<input type="text" id="twAddName" placeholder="元大台灣50" autocomplete="off"></label>
-      <label>股數<input type="number" id="twAddQty" step="any" placeholder="1000" autocomplete="off"></label>
-      <label>平均成本<input type="number" id="twAddAvgCost" step="any" placeholder="平均成本" autocomplete="off"></label>
-      <label>現價<input type="number" id="twAddPrice" step="any" placeholder="現價" autocomplete="off"></label>
+      <label>股數<input type="text" inputmode="decimal" id="twAddQty" placeholder="1000" autocomplete="off"></label>
+      <label>平均成本<input type="text" inputmode="decimal" id="twAddAvgCost" placeholder="平均成本" autocomplete="off"></label>
+      <label>現價<input type="text" inputmode="decimal" id="twAddPrice" placeholder="現價" autocomplete="off"></label>
       <label>類別
         <select id="twAddCategory"><option value="equity">股票</option><option value="bond">債券</option></select>
       </label>
@@ -247,9 +246,9 @@
     </table>
     <div class="add-row">
       <label>代號 Ticker<input type="text" id="usAddCode" placeholder="AAPL" autocomplete="off"></label>
-      <label>股數<input type="number" id="usAddQty" step="any" placeholder="10" autocomplete="off"></label>
-      <label>平均成本<input type="number" id="usAddAvgCost" step="any" placeholder="平均成本" autocomplete="off"></label>
-      <label>現價<input type="number" id="usAddPrice" step="any" placeholder="現價" autocomplete="off"></label>
+      <label>股數<input type="text" inputmode="decimal" id="usAddQty" placeholder="10" autocomplete="off"></label>
+      <label>平均成本<input type="text" inputmode="decimal" id="usAddAvgCost" placeholder="平均成本" autocomplete="off"></label>
+      <label>現價<input type="text" inputmode="decimal" id="usAddPrice" placeholder="現價" autocomplete="off"></label>
       <label>類別
         <select id="usAddCategory"><option value="equity">股票</option><option value="bond">債券</option></select>
       </label>
@@ -367,9 +366,9 @@ function renderTable(bodyId, holdings, currencySymbol, market){
     tr.setAttribute('data-tr-id', h.id);
     tr.innerHTML = `
       <td><span class="name">${h.name}</span><span class="tag ${tagClass}">${tagLabel}</span>${codeLine?`<span class="code">${codeLine}</span>`:''}</td>
-      <td style="text-align:right;"><input class="qty-input" type="number" step="any" min="0" value="${h.qty}" data-market="${market}" data-id="${h.id}" name="qty_${h.id}" autocomplete="new-password" data-lpignore="true"></td>
-      <td style="text-align:right;"><input class="avgcost-input" type="number" step="any" min="0" value="${h.avgCost || 0}" data-market="${market}" data-id="${h.id}" name="cost_${h.id}" autocomplete="new-password" data-lpignore="true"></td>
-      <td style="text-align:right;"><input class="price-input" type="number" step="any" value="${h.price}" data-market="${market}" data-id="${h.id}" name="price_${h.id}" autocomplete="new-password" data-lpignore="true"></td>
+      <td style="text-align:right;"><input class="qty-input" type="text" inputmode="decimal" value="${h.qty}" data-market="${market}" data-id="${h.id}" autocomplete="one-time-code" aria-autocomplete="none" spellcheck="false"></td>
+      <td style="text-align:right;"><input class="avgcost-input" type="text" inputmode="decimal" value="${h.avgCost || 0}" data-market="${market}" data-id="${h.id}" autocomplete="one-time-code" aria-autocomplete="none" spellcheck="false"></td>
+      <td style="text-align:right;"><input class="price-input" type="text" inputmode="decimal" value="${h.price}" data-market="${market}" data-id="${h.id}" autocomplete="one-time-code" aria-autocomplete="none" spellcheck="false"></td>
       <td style="text-align:right;" class="val-cell">${currencySymbol}${fmt(h.value)}</td>
       <td style="text-align:right;" class="pnl-cell ${pnlClass}">${pnl>=0?'+':''}${fmt(pnl)} (${pnlPct.toFixed(1)}%)</td>
       <td style="text-align:right;"><button class="remove-btn" type="button" data-market="${market}" data-id="${h.id}">✕</button></td>
