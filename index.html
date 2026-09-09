@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>資產配置與走勢追蹤</title>
+<!-- 引入 Chart.js 圖表庫 -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600;6..72,700&family=Inter:wght@400;500;600;700&display=swap');
 
@@ -145,10 +147,17 @@
   .bar-container{display:flex;height:18px;border-radius:9px;overflow:hidden;background:var(--surface-2);margin-top:15px;}
   .bar-segment{height:100%;transition:width .3s;}
 
-  .history-list{max-height:200px;overflow-y:auto;font-size:13px;}
+  .history-list{max-height:180px;overflow-y:auto;font-size:13px;}
   .history-row{display:flex;justify-content:space-between;padding:8px 4px;border-bottom:1px solid var(--border);}
   .history-row:last-child{border-bottom:none;}
   .history-date{color:var(--text-dim);}
+
+  .chart-container{
+    position:relative;
+    width:100%;
+    height:300px;
+    margin-top:10px;
+  }
 </style>
 </head>
 <body>
@@ -270,10 +279,17 @@
     </div>
   </div>
 
+  <!-- 新增：總資產走勢圖卡片 -->
+  <div class="card">
+    <div class="card-title">總資產走勢圖 (NT$)</div>
+    <div class="chart-container">
+      <canvas id="assetChart"></canvas>
+    </div>
+  </div>
+
 </div>
 
 <script>
-// 已填入 JSONBin 金鑰
 const CONFIG = {
   binId: '6aa169c2ac6210605ab85679',
   apiKey: '$2a$10$tLRS3iAUP7Jn20dvkb6fEOe7DPL73UnZp4pi2ozRepMDXdeBpTjzi'
@@ -303,6 +319,7 @@ const INITIAL_STATE = {
 
 let state = JSON.parse(JSON.stringify(INITIAL_STATE));
 let history = [];
+let assetChart = null;
 
 function computeTotals(){
   const fx = state.fx || 31.5;
@@ -421,6 +438,7 @@ function fullRender(){
   renderTable('usBody', state.us, '$', 'us');
   updateGlobalDisplaysOnly();
   renderHistory();
+  renderChart();
 }
 
 function renderHistory(){
@@ -436,6 +454,66 @@ function renderHistory(){
       <b>NT$ ${fmt(s.totalValue)}</b>
     </div>
   `).join('');
+}
+
+// 渲染走勢圖表
+function renderChart(){
+  const ctx = document.getElementById('assetChart').getContext('2d');
+  const labels = history.map(h => h.date);
+  const dataPoints = history.map(h => h.totalValue);
+
+  if(assetChart){
+    assetChart.destroy();
+  }
+
+  assetChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: '總資產 (NT$)',
+        data: dataPoints,
+        borderColor: '#C9A227',
+        backgroundColor: 'rgba(201, 162, 39, 0.15)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.3,
+        pointBackgroundColor: '#C9A227',
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return ' 總資產: NT$ ' + fmt(context.raw);
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(35, 43, 61, 0.5)' },
+          ticks: { color: '#8B93A7', font: { family: 'Inter' } }
+        },
+        y: {
+          grid: { color: 'rgba(35, 43, 61, 0.5)' },
+          ticks: {
+            color: '#8B93A7',
+            font: { family: 'Inter' },
+            callback: function(value) {
+              return 'NT$ ' + (value / 10000).toFixed(0) + '萬';
+            }
+          }
+        }
+      }
+    }
+  });
 }
 
 function syncInputsToStateInMemory(){
