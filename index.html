@@ -256,10 +256,10 @@
     </div>
 
     <div class="btnrow">
-      <button class="btn-primary" id="updateAndSaveAllBtn" type="button">💾 儲存所有修改</button>
+      <button class="btn-primary" id="updateAndSaveAllBtn" type="button">☁️ 儲存並同步至雲端</button>
       <button class="btn-ghost" id="snapshotBtn" type="button">手動記錄本週快照</button>
       <button class="btn-ghost" id="resetBtn" type="button">還原預設資料</button>
-      <span class="save-msg" id="saveMsg" style="opacity:0;transition:opacity .3s;">已成功儲存！重新整理不會消失。</span>
+      <span class="save-msg" id="saveMsg" style="opacity:0;transition:opacity .3s;">已成功同步至雲端！</span>
     </div>
   </div>
 
@@ -273,10 +273,15 @@
 </div>
 
 <script>
+// 已填入 JSONBin 金鑰
+const CONFIG = {
+  binId: '6aa169c2ac6210605ab85679',
+  apiKey: '$2a$10$tLRS3iAUP7Jn20dvkb6fEOe7DPL73UnZp4pi2ozRepMDXdeBpTjzi'
+};
+
 const fmt = n => Math.round(n || 0).toLocaleString('en-US');
 function uid(prefix){ return prefix + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
-// 依據截圖內容精準更新預設資料
 const INITIAL_STATE = {
   fx: 31.5,
   tw: [
@@ -307,16 +312,14 @@ function computeTotals(){
   state.tw.forEach(h=>{ 
     const val = (h.qty || 0) * (h.price || 0); 
     const cost = (h.qty || 0) * (h.avgCost || 0);
-    twValue += val; 
-    twCost += cost; 
+    twValue += val; twCost += cost; 
     if(h.category === 'bond') bondTWD += val; else equityTWD += val;
   });
   
   state.us.forEach(h=>{ 
     const valUSD = (h.qty || 0) * (h.price || 0); 
     const costUSD = (h.qty || 0) * (h.avgCost || 0);
-    usValueUSD += valUSD; 
-    usCostUSD += costUSD; 
+    usValueUSD += valUSD; usCostUSD += costUSD; 
     const valTWD = valUSD * fx;
     if(h.category === 'bond') bondTWD += valTWD; else equityTWD += valTWD;
   });
@@ -448,20 +451,57 @@ function syncInputsToStateInMemory(){
   state.fx = parseFloat(document.getElementById('fxRate').value) || 31.5;
 }
 
-function saveStateToStorage(){
+// 雲端同步：上傳資料至 JSONBin
+async function saveToCloud(){
   syncInputsToStateInMemory();
-  localStorage.setItem('asset_state_v3', JSON.stringify(state)); 
-  localStorage.setItem('asset_history_v3', JSON.stringify(history)); 
+  const msg = document.getElementById('saveMsg');
+  msg.textContent = '⏳ 上傳至雲端中...';
+  msg.style.opacity = 1;
+
+  try{
+    const res = await fetch(`https://api.jsonbin.io/v3/b/${CONFIG.binId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': CONFIG.apiKey
+      },
+      body: JSON.stringify({ state, history })
+    });
+    if(res.ok){
+      msg.textContent = '✅ 已成功同步至雲端！';
+    } else {
+      throw new Error('API Error');
+    }
+  }catch(e){
+    console.error(e);
+    msg.textContent = '❌ 雲端同步失敗，儲存於本機';
+    localStorage.setItem('asset_state_v3', JSON.stringify(state));
+    localStorage.setItem('asset_history_v3', JSON.stringify(history));
+  }
+  setTimeout(()=>msg.style.opacity = 0, 3000);
 }
 
-function loadState(){
-  try{ 
-    const rawState = localStorage.getItem('asset_state_v3');
-    const rawHist = localStorage.getItem('asset_history_v3');
-    if(rawState) state = JSON.parse(rawState);
-    if(rawHist) history = JSON.parse(rawHist);
+// 雲端同步：從 JSONBin 下載資料
+async function loadFromCloud(){
+  try{
+    const res = await fetch(`https://api.jsonbin.io/v3/b/${CONFIG.binId}/latest`, {
+      headers: { 'X-Master-Key': CONFIG.apiKey }
+    });
+    if(res.ok){
+      const data = await res.json();
+      if(data.record && data.record.state){
+        state = data.record.state;
+        history = data.record.history || [];
+      }
+    }
   }catch(e){
-    console.error("載入失敗：", e);
+    console.error('下載雲端資料失敗，改讀取本機快照：', e);
+    try{
+      const rawState = localStorage.getItem('asset_state_v3');
+      const rawHist = localStorage.getItem('asset_history_v3');
+      if(rawState) state = JSON.parse(rawState);
+      if(rawHist) history = JSON.parse(rawHist);
+    }catch(err){}
   }
 }
 
@@ -483,12 +523,7 @@ document.addEventListener('input', (e)=>{
   }
 });
 
-document.getElementById('updateAndSaveAllBtn').addEventListener('click', ()=>{
-  saveStateToStorage();
-  const msg = document.getElementById('saveMsg');
-  msg.style.opacity = 1;
-  setTimeout(()=>msg.style.opacity = 0, 2000);
-});
+document.getElementById('updateAndSaveAllBtn').addEventListener('click', saveToCloud);
 
 async function fetchYahooPrice(symbol){
   const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
@@ -515,9 +550,7 @@ document.getElementById('refreshBtn').addEventListener('click', async ()=>{
         h.price = price;
         successCount++;
       }
-    }catch(e){
-      console.warn(`美股 ${h.code} 抓取失敗`, e);
-    }
+    }catch(e){}
   }
 
   for(let h of state.tw){
@@ -529,12 +562,10 @@ document.getElementById('refreshBtn').addEventListener('click', async ()=>{
         h.price = price;
         successCount++;
       }
-    }catch(e){
-      console.warn(`台股 ${h.code} 抓取失敗`, e);
-    }
+    }catch(e){}
   }
 
-  saveStateToStorage();
+  await saveToCloud();
   fullRender();
   
   if(successCount > 0){
@@ -556,7 +587,7 @@ document.getElementById('twAddBtn').addEventListener('click', ()=>{
   if(!code || !qty){ alert('請填寫代號與股數'); return; }
 
   state.tw.push({ id:uid('tw'), name, code, qty, avgCost, price, category });
-  saveStateToStorage(); fullRender();
+  saveToCloud(); fullRender();
   ['twAddCode','twAddName','twAddQty','twAddAvgCost','twAddPrice'].forEach(id=>document.getElementById(id).value='');
 });
 
@@ -569,7 +600,7 @@ document.getElementById('usAddBtn').addEventListener('click', ()=>{
   if(!code || !qty){ alert('請填寫 Ticker 與股數'); return; }
 
   state.us.push({ id:uid('us'), name:code, code, qty, avgCost, price, category });
-  saveStateToStorage(); fullRender();
+  saveToCloud(); fullRender();
   ['usAddCode','usAddQty','usAddAvgCost','usAddPrice'].forEach(id=>document.getElementById(id).value='');
 });
 
@@ -579,34 +610,32 @@ document.addEventListener('click', (e)=>{
     const id = e.target.dataset.id;
     if(confirm('確定要移除這筆持倉嗎？')){
       state[market] = state[market].filter(h=>h.id!==id);
-      saveStateToStorage(); fullRender();
+      saveToCloud(); fullRender();
     }
   }
 });
 
-document.getElementById('snapshotBtn').addEventListener('click', ()=>{
-  saveStateToStorage();
+document.getElementById('snapshotBtn').addEventListener('click', async ()=>{
   const totals = computeTotals();
   const now = new Date();
   const dateStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
   history.push({ date: dateStr, totalValue: totals.totalValue });
-  saveStateToStorage();
+  await saveToCloud();
   fullRender();
-  alert('已成功新增本週快照記錄！');
+  alert('已成功新增本週快照記錄並同步雲端！');
 });
 
-document.getElementById('resetBtn').addEventListener('click', ()=>{
+document.getElementById('resetBtn').addEventListener('click', async ()=>{
   if(confirm('確定要還原成預設資料嗎？')){
     state = JSON.parse(JSON.stringify(INITIAL_STATE));
     history = [];
-    localStorage.removeItem('asset_state_v3');
-    localStorage.removeItem('asset_history_v3');
+    await saveToCloud();
     fullRender();
   }
 });
 
-(function init(){
-  loadState();
+(async function init(){
+  await loadFromCloud();
   document.getElementById('fxRate').value = state.fx || 31.5;
   fullRender();
 })();
