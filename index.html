@@ -155,7 +155,7 @@
 <div class="wrap">
 
   <h1>資產配置與走勢</h1>
-  <p class="subtitle">台股 + 美股持倉整合檢視 · 狀態完全同步修正版</p>
+  <p class="subtitle">台股 + 美股持倉整合檢視 · CORS與Persistence終極修復版</p>
 
   <div class="hero">
     <div class="hero-label">總資產淨值（換算新台幣）</div>
@@ -259,7 +259,7 @@
       <button class="btn-primary" id="updateAndSaveAllBtn" type="button">💾 儲存所有修改</button>
       <button class="btn-ghost" id="snapshotBtn" type="button">手動記錄本週快照</button>
       <button class="btn-ghost" id="resetBtn" type="button">還原預設資料</button>
-      <span class="save-msg" id="saveMsg" style="opacity:0;transition:opacity .3s;">已成功儲存至瀏覽器！</span>
+      <span class="save-msg" id="saveMsg" style="opacity:0;transition:opacity .3s;">已成功儲存！重新整理不會消失。</span>
     </div>
   </div>
 
@@ -436,21 +436,36 @@ function renderHistory(){
   `).join('');
 }
 
-function saveStateToStorage(){ 
-  localStorage.setItem('asset_state_v2', JSON.stringify(state)); 
-  localStorage.setItem('asset_history_v2', JSON.stringify(history)); 
+function syncInputsToStateInMemory(){
+  document.querySelectorAll('input[data-market]').forEach(input => {
+    const market = input.dataset.market;
+    const id = input.dataset.id;
+    const field = input.dataset.field;
+    const item = state[market].find(x => x.id === id);
+    if(item){
+      item[field] = parseFloat(input.value) || 0;
+    }
+  });
+  state.fx = parseFloat(document.getElementById('fxRate').value) || 31.5;
+}
+
+function saveStateToStorage(){
+  syncInputsToStateInMemory();
+  localStorage.setItem('asset_state_v3', JSON.stringify(state)); 
+  localStorage.setItem('asset_history_v3', JSON.stringify(history)); 
 }
 
 function loadState(){
   try{ 
-    const rawState = localStorage.getItem('asset_state_v2');
-    const rawHist = localStorage.getItem('asset_history_v2');
+    const rawState = localStorage.getItem('asset_state_v3');
+    const rawHist = localStorage.getItem('asset_history_v3');
     if(rawState) state = JSON.parse(rawState);
     if(rawHist) history = JSON.parse(rawHist);
-  }catch(e){}
+  }catch(e){
+    console.error("載入失敗：", e);
+  }
 }
 
-// 動態綁定所有修改
 document.addEventListener('input', (e)=>{
   const target = e.target;
   const market = target.dataset.market;
@@ -469,63 +484,68 @@ document.addEventListener('input', (e)=>{
   }
 });
 
-// 核心修復：點擊儲存按鈕時，僅同步寫入 localStorage，絕不觸發 fullRender 覆蓋 DOM
 document.getElementById('updateAndSaveAllBtn').addEventListener('click', ()=>{
-  // 強制最後一次掃描 DOM inputs 確保狀態 100% 同步
-  document.querySelectorAll('input[data-market]').forEach(input => {
-    const market = input.dataset.market;
-    const id = input.dataset.id;
-    const field = input.dataset.field;
-    const item = state[market].find(x => x.id === id);
-    if(item){
-      item[field] = parseFloat(input.value) || 0;
-    }
-  });
-
   saveStateToStorage();
-  
   const msg = document.getElementById('saveMsg');
   msg.style.opacity = 1;
   setTimeout(()=>msg.style.opacity = 0, 2000);
 });
 
+// 透過代理抓取 Yahoo 數據以解決 CORS 限制問題
+async function fetchYahooPrice(symbol){
+  const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
+  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+  
+  const res = await fetch(proxyUrl);
+  if(!res.ok) throw new Error('Network error');
+  const data = await res.json();
+  const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+  return price;
+}
+
 document.getElementById('refreshBtn').addEventListener('click', async ()=>{
   const statusEl = document.getElementById('refreshStatus');
-  statusEl.textContent = '⏳ 正在線上更新最新股價中...';
+  statusEl.textContent = '⏳ 正在經由代理連線更新最新股價中...';
   
-  try {
-    for(let h of state.us){
-      if(!h.code) continue;
-      try{
-        const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${h.code}`);
-        const data = await res.json();
-        const meta = data?.chart?.result?.[0]?.meta;
-        if(meta && meta.regularMarketPrice){
-          h.price = meta.regularMarketPrice;
-        }
-      }catch(e){}
-    }
+  let successCount = 0;
 
-    for(let h of state.tw){
-      if(!h.code) continue;
-      try{
-        const symbol = h.code.length === 4 || h.code.length === 6 ? `${h.code}.TW` : h.code;
-        const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`);
-        const data = await res.json();
-        const meta = data?.chart?.result?.[0]?.meta;
-        if(meta && meta.regularMarketPrice){
-          h.price = meta.regularMarketPrice;
-        }
-      }catch(e){}
+  for(let h of state.us){
+    if(!h.code) continue;
+    try{
+      const price = await fetchYahooPrice(h.code);
+      if(price){
+        h.price = price;
+        successCount++;
+      }
+    }catch(e){
+      console.warn(`美股 ${h.code} 抓取失敗`, e);
     }
-
-    saveStateToStorage();
-    fullRender();
-    statusEl.textContent = '✅ 最新股價已成功更新！';
-  } catch(e) {
-    statusEl.textContent = '⚠️ 部分股價線上抓取失敗，請手動校正價格。';
   }
-  setTimeout(()=> statusEl.textContent = '點擊上方按鈕可線上抓取台美股最新市價', 3000);
+
+  for(let h of state.tw){
+    if(!h.code) continue;
+    try{
+      const symbol = h.code.length === 4 || h.code.length === 6 ? `${h.code}.TW` : h.code;
+      const price = await fetchYahooPrice(symbol);
+      if(price){
+        h.price = price;
+        successCount++;
+      }
+    }catch(e){
+      console.warn(`台股 ${h.code} 抓取失敗`, e);
+    }
+  }
+
+  saveStateToStorage();
+  fullRender();
+  
+  if(successCount > 0){
+    statusEl.textContent = `✅ 已成功即時更新 ${successCount} 檔最新股價！`;
+  } else {
+    statusEl.textContent = '⚠️ 網路連線受阻，請稍後再試或手動修改價格。';
+  }
+  
+  setTimeout(()=> statusEl.textContent = '點擊上方按鈕可線上抓取台美股最新市價', 4000);
 });
 
 document.getElementById('twAddBtn').addEventListener('click', ()=>{
@@ -581,8 +601,8 @@ document.getElementById('resetBtn').addEventListener('click', ()=>{
   if(confirm('確定要還原成預設資料嗎？')){
     state = JSON.parse(JSON.stringify(INITIAL_STATE));
     history = [];
-    localStorage.removeItem('asset_state_v2');
-    localStorage.removeItem('asset_history_v2');
+    localStorage.removeItem('asset_state_v3');
+    localStorage.removeItem('asset_history_v3');
     fullRender();
   }
 });
