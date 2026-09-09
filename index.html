@@ -155,7 +155,7 @@
 <div class="wrap">
 
   <h1>資產配置與走勢</h1>
-  <p class="subtitle">台股 + 美股持倉整合檢視 · CORS與Persistence終極修復版</p>
+  <p class="subtitle">台股 + 美股持倉整合檢視</p>
 
   <div class="hero">
     <div class="hero-label">總資產淨值（換算新台幣）</div>
@@ -276,24 +276,23 @@
 const fmt = n => Math.round(n || 0).toLocaleString('en-US');
 function uid(prefix){ return prefix + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
+// 依據截圖內容精準更新預設資料
 const INITIAL_STATE = {
   fx: 31.5,
   tw: [
-    { id:'seed-tw-0', name:'元大台灣50', code:'0050', qty:49533, avgCost:42.63, price:106.69, category:'equity' },
-    { id:'seed-tw-1', name:'國泰20年美債', code:'00687B', qty:32390, avgCost:27.57, price:27.15, category:'bond' },
-    { id:'seed-tw-2', name:'群益ESG投等債20+', code:'00937B', qty:10510, avgCost:12.87, price:14.32, category:'bond' },
-    { id:'seed-tw-3', name:'凱基台灣TOP50', code:'009816', qty:12648, avgCost:13.93, price:15.55, category:'equity' },
-    { id:'seed-tw-4', name:'台積電', code:'2330', qty:2200, avgCost:540.78, price:2409.29, category:'equity' },
-    { id:'seed-tw-5', name:'永豐金', code:'2890', qty:39200, avgCost:16.06, price:39.62, category:'equity' },
-    { id:'seed-tw-6', name:'聯亞', code:'3081', qty:750, avgCost:1900.37, price:3290.40, category:'equity' },
+    { id:'seed-tw-0', name:'元大台灣50', code:'0050', qty:49533, avgCost:42.63, price:109.65, category:'equity' },
+    { id:'seed-tw-1', name:'國泰20年美債', code:'00687B', qty:32760, avgCost:27.56, price:26.91, category:'bond' },
+    { id:'seed-tw-2', name:'群益ESG投等債20+', code:'00937B', qty:30510, avgCost:13.79, price:14.20, category:'bond' },
+    { id:'seed-tw-3', name:'凱基台灣TOP50', code:'009816', qty:13267, avgCost:14.04, price:16.11, category:'equity' },
+    { id:'seed-tw-4', name:'台積電', code:'2330', qty:2200, avgCost:540.78, price:2465.00, category:'equity' },
+    { id:'seed-tw-5', name:'永豐金', code:'2890', qty:40236, avgCost:16.69, price:43.20, category:'equity' },
+    { id:'seed-tw-6', name:'聯亞', code:'3081', qty:750, avgCost:1900.37, price:2850.00, category:'equity' },
   ],
   us: [
-    { id:'seed-us-0', name:'NVDA', code:'NVDA', qty:0.00218, avgCost:128.44, price:217.89, category:'equity' },
-    { id:'seed-us-1', name:'SMCI', code:'SMCI', qty:400, avgCost:44.43, price:37.08, category:'equity' },
-    { id:'seed-us-2', name:'SMCX', code:'SMCX', qty:5400, avgCost:22.32, price:11.81, category:'equity' },
-    { id:'seed-us-3', name:'TLT', code:'TLT', qty:0.73778, avgCost:85.13, price:82.94, category:'bond' },
-    { id:'seed-us-4', name:'TLT Call', code:'', qty:3, avgCost:60.69, price:45.00, category:'bond', note:'10/16/26 $85 x3' },
-    { id:'seed-us-5', name:'VT', code:'VT', qty:350, avgCost:140.60, price:161.12, category:'equity' },
+    { id:'seed-us-0', name:'SMCI', code:'SMCI', qty:400, avgCost:44.43, price:39.48, category:'equity' },
+    { id:'seed-us-1', name:'SMCX', code:'SMCX', qty:5400, avgCost:22.32, price:13.30, category:'equity' },
+    { id:'seed-us-2', name:'TLT Call', code:'', qty:300, avgCost:0.6069, price:0.31, category:'bond', note:'10/16/26 $85 x3' },
+    { id:'seed-us-3', name:'VT', code:'VT', qty:350, avgCost:140.60, price:160.49, category:'equity' },
   ]
 };
 
@@ -491,7 +490,6 @@ document.getElementById('updateAndSaveAllBtn').addEventListener('click', ()=>{
   setTimeout(()=>msg.style.opacity = 0, 2000);
 });
 
-// 透過代理抓取 Yahoo 數據以解決 CORS 限制問題
 async function fetchYahooPrice(symbol){
   const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
   const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
