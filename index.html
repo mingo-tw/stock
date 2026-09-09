@@ -203,7 +203,7 @@
     </div>
 
     <div class="btnrow" style="margin-top:0;margin-bottom:18px;">
-      <button class="btn-primary" id="refreshBtn">更新最新市價</button>
+      <button class="btn-primary" id="refreshBtn">僅更新最新市價</button>
       <span class="save-msg" id="refreshStatus" style="color:var(--text-dim);">開啟頁面時會自動嘗試更新一次</span>
     </div>
 
@@ -241,9 +241,10 @@
     </div>
 
     <div class="btnrow">
-      <button class="btn-primary" id="saveBtn">手動記錄本週快照</button>
+      <button class="btn-primary" id="updateAndSaveAllBtn">🔄 更新所有資產並儲存</button>
+      <button class="btn-ghost" id="saveBtn">手動記錄本週快照</button>
       <button class="btn-ghost" id="resetBtn">還原為預設持倉清單</button>
-      <span class="save-msg" id="saveMsg" style="opacity:0;transition:opacity .3s;">已記錄本週快照</span>
+      <span class="save-msg" id="saveMsg" style="opacity:0;transition:opacity .3s;">已更新並儲存最新狀態</span>
     </div>
   </div>
 
@@ -261,7 +262,7 @@
     <br><br>
     <b>關於「每週五自動記錄」：</b>這個頁面沒辦法在您沒打開它的時候於背景自己醒來記錄。只要您在週五晚上 10 點之後
     （或之後任何一天）打開這個頁面，就會自動把當下的現價換算成當週快照存起來，同一週只記一次；忘記的話可以用
-    「手動記錄本週快照」補記。
+    「手動記錄本週快照」或「更新所有資產並儲存」補記。
   </div>
 
 </div>
@@ -273,8 +274,7 @@ function uid(prefix){
   return prefix + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 }
 
-// ---------- Initial holdings (transcribed from the uploaded screenshots) ----------
-// category: 'equity' (股票/股票型ETF) or 'bond' (債券/債券型ETF)
+// ---------- Initial holdings ----------
 const INITIAL_STATE = {
   fx: 31.5,
   tw: [
@@ -366,7 +366,7 @@ function renderHero(totals, lastSnapshot){
   }
 }
 
-// ---------- Pure-SVG charts (no external library — avoids CDN/CORS/ad-block failures) ----------
+// ---------- Pure-SVG charts ----------
 function polarToCartesian(cx, cy, r, angleDeg){
   const a = (angleDeg - 90) * Math.PI / 180;
   return { x: cx + r*Math.cos(a), y: cy + r*Math.sin(a) };
@@ -476,7 +476,7 @@ async function fullRender(){
   renderHistory(history);
 }
 
-// ---------- Persistence (plain browser localStorage — works on any static host) ----------
+// ---------- Persistence ----------
 async function loadHistory(){
   try{ const raw = localStorage.getItem('asset_snapshots_weekly'); return raw ? JSON.parse(raw) : []; }
   catch(e){ return []; }
@@ -602,25 +602,56 @@ document.addEventListener('click', (e)=>{
   }
 });
 
-document.addEventListener('change', (e)=>{
+// 即時更新股數、現價與匯率輸入
+document.addEventListener('input', (e)=>{
   if(e.target.id === 'fxRate'){
     state.fx = parseFloat(e.target.value) || 0; saveState(); fullRender();
   }
   if(e.target.classList.contains('price-input') || e.target.classList.contains('qty-input')){
-    const market=e.target.dataset.market,id=e.target.dataset.id,h=state[market].find(x=>x.id===id); if(!h)return;
-    const v=parseFloat(e.target.value); const n=Number.isFinite(v)&&v>=0?v:0;
+    const market=e.target.dataset.market, id=e.target.dataset.id, h=state[market].find(x=>x.id===id); 
+    if(!h) return;
+    const v=parseFloat(e.target.value); 
+    const n=Number.isFinite(v)&&v>=0?v:0;
     if(e.target.classList.contains('qty-input')) h.qty=n; else h.price=n;
-    saveState(); fullRender();
+    saveState(); 
+    fullRender();
   }
 });
 
 document.getElementById('refreshBtn').addEventListener('click', refreshLivePrices);
+
+// 更新所有資產並儲存按鈕
+document.getElementById('updateAndSaveAllBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('updateAndSaveAllBtn');
+  btn.disabled = true;
+  btn.textContent = '🔄 更新並儲存中…';
+  
+  // 1. 線上抓取最新價格
+  await refreshLivePrices();
+  
+  // 2. 儲存當前狀態
+  await saveState();
+  
+  // 3. 記錄/更新本週快照
+  const fridayDate = toDateStr(mostRecentFriday10pm(new Date()));
+  await recordSnapshot(fridayDate, false);
+  await fullRender();
+
+  btn.disabled = false;
+  btn.textContent = '🔄 更新所有資產並儲存';
+
+  const msg = document.getElementById('saveMsg');
+  msg.textContent = '已更新最新市價並儲存快照！';
+  msg.style.opacity = 1;
+  setTimeout(()=>msg.style.opacity = 0, 2500);
+});
 
 document.getElementById('saveBtn').addEventListener('click', async ()=>{
   const fridayDate = toDateStr(mostRecentFriday10pm(new Date()));
   await recordSnapshot(fridayDate, false);
   await fullRender();
   const msg = document.getElementById('saveMsg');
+  msg.textContent = '已記錄本週快照';
   msg.style.opacity = 1;
   setTimeout(()=>msg.style.opacity = 0, 1800);
 });
