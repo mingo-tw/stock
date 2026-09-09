@@ -75,7 +75,7 @@
   .legend-row{display:flex;gap:18px;margin-top:14px;font-size:12.5px;color:var(--text-dim);flex-wrap:wrap;}
   .legend-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;}
 
-  .fx-row{display:flex;align-items:center;gap:10px;margin-bottom:16px;font-size:13px;color:var(--text-dim);}
+  .fx-row{display:flex;align-items:center;gap:10px;margin-bottom:16px;font-size:13px;color:var(--text-dim);flex-wrap:wrap;}
   .fx-row input{
     width:80px;background:var(--surface-2);border:1px solid var(--border);
     color:var(--text);border-radius:7px;padding:5px 8px;font-size:13px;font-family:inherit;
@@ -98,16 +98,35 @@
   .tag-equity{background:rgba(201,162,39,0.15);color:var(--equity);}
   .tag-bond{background:rgba(91,141,239,0.15);color:var(--bond);}
   input.price-input{
-    width:88px;background:var(--surface-2);border:1px solid var(--border);
+    width:84px;background:var(--surface-2);border:1px solid var(--border);
     color:var(--text);border-radius:6px;padding:4px 6px;font-size:13px;
     text-align:right;font-family:inherit;
   }
   input.price-input:focus{outline:1px solid var(--accent);}
+  .remove-btn{
+    background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:15px;
+    padding:2px 6px;border-radius:6px;line-height:1;
+  }
+  .remove-btn:hover{color:var(--gain);background:rgba(229,72,77,0.1);}
 
   .section-heading{
     font-size:13px;color:var(--text-dim);margin:22px 0 8px;font-weight:600;
+    display:flex;justify-content:space-between;align-items:center;
   }
   .section-heading:first-child{margin-top:0;}
+
+  .add-row{
+    display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+    background:var(--surface-2);border:1px dashed var(--border);
+    border-radius:10px;padding:12px;margin-top:10px;font-size:12.5px;
+  }
+  .add-row input, .add-row select{
+    background:var(--bg);border:1px solid var(--border);color:var(--text);
+    border-radius:6px;padding:6px 8px;font-size:12.5px;font-family:inherit;
+  }
+  .add-row input[type=text]{width:90px;}
+  .add-row input[type=number]{width:80px;}
+  .add-row label{color:var(--text-dim);font-size:11px;display:flex;flex-direction:column;gap:3px;}
 
   .btnrow{display:flex;gap:10px;align-items:center;margin-top:18px;flex-wrap:wrap;}
   button{
@@ -118,8 +137,8 @@
   .btn-primary:hover{background:#d8b12e;}
   .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text-dim);}
   .btn-ghost:hover{color:var(--text);border-color:var(--text-dim);}
-  .save-msg{font-size:12.5px;color:var(--accent);opacity:0;transition:opacity .3s;}
-  .save-msg.show{opacity:1;}
+  .btn-small{padding:6px 12px;font-size:12.5px;}
+  .save-msg{font-size:12.5px;color:var(--accent);}
 
   .history-list{max-height:220px;overflow-y:auto;font-size:13px;}
   .history-row{
@@ -129,7 +148,7 @@
   .history-row:last-child{border-bottom:none;}
   .history-date{color:var(--text-dim);}
   .auto-badge{font-size:10px;color:var(--text-dim);margin-left:6px;}
-  .empty-note{color:var(--text-dim);font-size:12.5px;padding:12px 0;}
+  .empty-note{color:var(--text-dim);font-size:12.5px;padding:12px 0;text-align:center;}
 
   .note{
     background:var(--surface-2);border:1px solid var(--border);
@@ -138,14 +157,14 @@
   }
   .note b{color:var(--text);}
 
-  canvas{max-width:100%;}
+  svg{display:block;}
 </style>
 </head>
 <body>
 <div class="wrap">
 
   <h1>資產配置與走勢</h1>
-  <p class="subtitle">台股 + 美股持倉整合檢視 · 每週五記錄一次快照，累積長期走勢</p>
+  <p class="subtitle">台股 + 美股持倉整合檢視 · 可自行新增/移除持倉 · 每週五記錄一次快照</p>
 
   <div class="hero">
     <div class="hero-label">總資產淨值（換算新台幣）</div>
@@ -160,7 +179,7 @@
   <div class="grid2">
     <div class="card">
       <div class="card-title">資產配置 — 股票 vs 債券</div>
-      <div style="position:relative;height:240px;" id="allocChartWrap"></div>
+      <div style="position:relative;height:220px;" id="allocChartWrap"></div>
       <div class="legend-row">
         <span><span class="legend-dot" style="background:var(--equity);"></span>股票 / 股票型 ETF</span>
         <span><span class="legend-dot" style="background:var(--bond);"></span>債券 / 債券型 ETF</span>
@@ -169,9 +188,7 @@
     <div class="card">
       <div class="card-title">資產走勢（每週五）</div>
       <div class="card-sub" id="trendSub">尚無歷史快照</div>
-      <div style="position:relative;height:240px;">
-        <canvas id="trendChart"></canvas>
-      </div>
+      <div style="position:relative;height:220px;" id="trendChartWrap"></div>
     </div>
   </div>
 
@@ -180,30 +197,51 @@
     <div class="fx-row">
       美元兌台幣匯率
       <input type="number" id="fxRate" value="31.5" step="0.01">
-      <span style="color:var(--text-dim);font-size:12px;">（用於將美股帳戶換算為台幣，請依實際匯率調整）</span>
+      <span style="color:var(--text-dim);font-size:12px;">（用於將美股帳戶換算為台幣）</span>
     </div>
 
     <div class="btnrow" style="margin-top:0;margin-bottom:18px;">
       <button class="btn-primary" id="refreshBtn">更新最新市價</button>
-      <span class="save-msg show" id="refreshStatus" style="color:var(--text-dim);">開啟頁面時會自動嘗試更新一次</span>
+      <span class="save-msg" id="refreshStatus" style="color:var(--text-dim);">開啟頁面時會自動嘗試更新一次</span>
     </div>
 
-    <div class="section-heading">台股帳戶（新台幣）</div>
+    <div class="section-heading"><span>台股帳戶（新台幣）</span></div>
     <table>
-      <thead><tr><th>標的</th><th>股數</th><th>現價</th><th>市值</th><th>損益</th></tr></thead>
+      <thead><tr><th>標的</th><th>股數</th><th>現價</th><th>市值</th><th>損益</th><th></th></tr></thead>
       <tbody id="twBody"></tbody>
     </table>
+    <div class="add-row">
+      <label>代號<input type="text" id="twAddCode" placeholder="0050"></label>
+      <label>名稱<input type="text" id="twAddName" placeholder="元大台灣50"></label>
+      <label>股數<input type="number" id="twAddQty" step="any" placeholder="1000"></label>
+      <label>成本(選填)<input type="number" id="twAddCost" step="any" placeholder="總成本"></label>
+      <label>現價(選填)<input type="number" id="twAddPrice" step="any" placeholder="先手動填,之後會嘗試自動更新"></label>
+      <label>類別
+        <select id="twAddCategory"><option value="equity">股票</option><option value="bond">債券</option></select>
+      </label>
+      <button class="btn-ghost btn-small" id="twAddBtn" style="align-self:flex-end;">＋ 新增台股</button>
+    </div>
 
-    <div class="section-heading">美股帳戶（美元）</div>
+    <div class="section-heading" style="margin-top:26px;"><span>美股帳戶（美元）</span></div>
     <table>
-      <thead><tr><th>標的</th><th>股數/口數</th><th>現價</th><th>市值</th><th>損益</th></tr></thead>
+      <thead><tr><th>標的</th><th>股數/口數</th><th>現價</th><th>市值</th><th>損益</th><th></th></tr></thead>
       <tbody id="usBody"></tbody>
     </table>
+    <div class="add-row">
+      <label>代號 Ticker<input type="text" id="usAddCode" placeholder="AAPL"></label>
+      <label>股數<input type="number" id="usAddQty" step="any" placeholder="10"></label>
+      <label>成本(選填)<input type="number" id="usAddCost" step="any" placeholder="總成本"></label>
+      <label>現價(選填)<input type="number" id="usAddPrice" step="any" placeholder="先手動填,之後會嘗試自動更新"></label>
+      <label>類別
+        <select id="usAddCategory"><option value="equity">股票</option><option value="bond">債券</option></select>
+      </label>
+      <button class="btn-ghost btn-small" id="usAddBtn" style="align-self:flex-end;">＋ 新增美股</button>
+    </div>
 
     <div class="btnrow">
       <button class="btn-primary" id="saveBtn">手動記錄本週快照</button>
-      <button class="btn-ghost" id="resetBtn">還原為截圖原始數值</button>
-      <span class="save-msg" id="saveMsg">已記錄本週快照</span>
+      <button class="btn-ghost" id="resetBtn">還原為預設持倉清單</button>
+      <span class="save-msg" id="saveMsg" style="opacity:0;transition:opacity .3s;">已記錄本週快照</span>
     </div>
   </div>
 
@@ -215,46 +253,51 @@
   </div>
 
   <div class="note">
-    <b>關於「每週五晚上 10 點自動記錄」：</b>這個頁面沒辦法在您沒打開它的時候，於背景自己醒來記錄——
-    它執行在瀏覽器的畫面裡，沒有排程或推播能力，也連不到券商即時報價。能做到最接近的方式是：
-    <b>只要您在週五晚上 10 點之後（或之後任何一天）打開這個頁面，它會自動把當下表格裡的現價換算成當週的快照存起來</b>，
-    不用手動按按鈕；同一週只會記一次。因此建議您養成「每週五晚上打開這裡、把現價更新成當天收盤價」的習慣，
-    這樣記錄的走勢才會準確。如果您那週忘了打開，可以用上面「手動記錄本週快照」補記。
+    <b>關於新增的股票能不能自動追蹤最新股價：</b>可以，只要代號輸入正確——台股會透過證交所公開的即時行情介面查詢（自動同時嘗試上市／上櫃），
+    美股會透過 Yahoo Finance（經公開代理服務轉接）用您輸入的 Ticker 查詢。這兩個都是免費、不需金鑰的公開服務，不是官方保證的穩定 API，
+    有可能哪天忽然失效或找不到某些代號；查不到的話畫面會顯示「失敗」，現價欄位可以隨時手動修改當備案，不影響其他功能。
+    <br><br>
+    <b>關於「每週五自動記錄」：</b>這個頁面沒辦法在您沒打開它的時候於背景自己醒來記錄。只要您在週五晚上 10 點之後
+    （或之後任何一天）打開這個頁面，就會自動把當下的現價換算成當週快照存起來，同一週只記一次；忘記的話可以用
+    「手動記錄本週快照」補記。
   </div>
 
 </div>
 
 <script>
-const TWD = 'TWD', USD = 'USD';
+// ---------- Formatting helpers ----------
+const fmt = n => Math.round(n).toLocaleString('en-US');
+function uid(prefix){
+  return prefix + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+}
 
-// Initial holdings, transcribed from the uploaded screenshots.
-// cost = 總成本 (original), qty = 股數/單位, price = 現價 (derived from 市值/qty, editable going forward)
+// ---------- Initial holdings (transcribed from the uploaded screenshots) ----------
 // category: 'equity' (股票/股票型ETF) or 'bond' (債券/債券型ETF)
-let state = {
+const INITIAL_STATE = {
   fx: 31.5,
   tw: [
-    { name:'元大台灣50', code:'0050',      qty:49533,  cost:2111734, price:106.69,  category:'equity' },
-    { name:'國泰20年美債', code:'00687B',  qty:32390,  cost:892924,  price:27.15,   category:'bond'   },
-    { name:'群益ESG投等債20+', code:'00937B', qty:10510, cost:135243, price:14.32,  category:'bond'   },
-    { name:'凱基台灣TOP50', code:'009816', qty:12648,  cost:176221,  price:15.55,   category:'equity' },
-    { name:'台積電', code:'2330',          qty:2200,   cost:1189723, price:2409.29, category:'equity' },
-    { name:'永豐金', code:'2890',          qty:39200,  cost:629590,  price:39.62,   category:'equity' },
-    { name:'聯亞', code:'3081',            qty:750,    cost:1425274, price:3290.40, category:'equity' },
+    { id:'seed-tw-0', name:'元大台灣50', code:'0050',      qty:49533,  cost:2111734, price:106.69,  category:'equity' },
+    { id:'seed-tw-1', name:'國泰20年美債', code:'00687B',  qty:32390,  cost:892924,  price:27.15,   category:'bond'   },
+    { id:'seed-tw-2', name:'群益ESG投等債20+', code:'00937B', qty:10510, cost:135243, price:14.32, category:'bond'   },
+    { id:'seed-tw-3', name:'凱基台灣TOP50', code:'009816', qty:12648,  cost:176221,  price:15.55,   category:'equity' },
+    { id:'seed-tw-4', name:'台積電', code:'2330',          qty:2200,   cost:1189723, price:2409.29, category:'equity' },
+    { id:'seed-tw-5', name:'永豐金', code:'2890',          qty:39200,  cost:629590,  price:39.62,   category:'equity' },
+    { id:'seed-tw-6', name:'聯亞', code:'3081',            qty:750,    cost:1425274, price:3290.40, category:'equity' },
   ],
   us: [
-    { name:'NVDA',      code:'',                 qty:0.00218, cost:0.28,    price:217.89, category:'equity' },
-    { name:'SMCI',      code:'',                 qty:400,     cost:17773,   price:37.08,  category:'equity' },
-    { name:'SMCX',      code:'',                 qty:5400,    cost:120554,  price:11.81,  category:'equity' },
-    { name:'TLT',       code:'',                 qty:0.73778, cost:62.81,   price:82.94,  category:'bond'   },
-    { name:'TLT Call',  code:'10/16/26 $85 x3',  qty:3,       cost:182.06,  price:45.00,  category:'bond', optionContract:true },
-    { name:'VT',        code:'',                 qty:350,     cost:49210,   price:161.12, category:'equity' },
+    { id:'seed-us-0', name:'NVDA',      code:'NVDA', qty:0.00218, cost:0.28,    price:217.89, category:'equity' },
+    { id:'seed-us-1', name:'SMCI',      code:'SMCI', qty:400,     cost:17773,   price:37.08,  category:'equity' },
+    { id:'seed-us-2', name:'SMCX',      code:'SMCX', qty:5400,    cost:120554,  price:11.81,  category:'equity' },
+    { id:'seed-us-3', name:'TLT',       code:'TLT',  qty:0.73778, cost:62.81,   price:82.94,  category:'bond'   },
+    { id:'seed-us-4', name:'TLT Call',  code:'',     qty:3,       cost:182.06,  price:45.00,  category:'bond', optionContract:true, note:'10/16/26 $85 x3' },
+    { id:'seed-us-5', name:'VT',        code:'VT',   qty:350,     cost:49210,   price:161.12, category:'equity' },
   ]
 };
-const INITIAL_STATE = JSON.parse(JSON.stringify(state));
 
-let allocChart, trendChart;
-const fmt = n => Math.round(n).toLocaleString('en-US');
+let state = JSON.parse(JSON.stringify(INITIAL_STATE));
+let history = [];
 
+// ---------- Totals ----------
 function computeTotals(){
   const fx = state.fx;
   let twValue=0, twCost=0, usValueUSD=0, usCostUSD=0;
@@ -275,22 +318,29 @@ function computeTotals(){
   return { twValue, twCost, usValueUSD, usCostUSD, usValueTWD, usCostTWD, totalValue, totalCost, equityTWD, bondTWD };
 }
 
-function renderTable(bodyId, holdings, currencySymbol){
+// ---------- Table rendering ----------
+function renderTable(bodyId, holdings, currencySymbol, market){
   const body = document.getElementById(bodyId);
   body.innerHTML = '';
-  holdings.forEach((h, idx)=>{
+  if(!holdings.length){
+    body.innerHTML = `<tr><td colspan="6" class="empty-note">尚無持倉，請在下方新增</td></tr>`;
+    return;
+  }
+  holdings.forEach((h)=>{
     const pnl = h.value - h.cost;
     const pnlPct = h.cost ? (pnl/h.cost*100) : 0;
     const pnlClass = pnl >= 0 ? 'delta-up' : 'delta-down';
     const tagClass = h.category==='bond' ? 'tag-bond' : 'tag-equity';
     const tagLabel = h.category==='bond' ? '債券' : '股票';
+    const codeLine = h.note ? h.note : h.code;
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><span class="name">${h.name}</span><span class="tag ${tagClass}">${tagLabel}</span>${h.code?`<span class="code">${h.code}</span>`:''}</td>
+      <td><span class="name">${h.name}</span><span class="tag ${tagClass}">${tagLabel}</span>${codeLine?`<span class="code">${codeLine}</span>`:''}</td>
       <td style="text-align:right;">${h.qty < 1 ? h.qty : fmt(h.qty)}</td>
-      <td style="text-align:right;"><input class="price-input" type="number" step="0.01" value="${h.price}" data-body="${bodyId}" data-idx="${idx}"></td>
+      <td style="text-align:right;"><input class="price-input" type="number" step="any" value="${h.price}" data-market="${market}" data-id="${h.id}"></td>
       <td style="text-align:right;">${currencySymbol}${fmt(h.value)}</td>
       <td style="text-align:right;" class="${pnlClass}">${pnl>=0?'+':''}${fmt(pnl)} (${pnlPct.toFixed(1)}%)</td>
+      <td style="text-align:right;"><button class="remove-btn" data-market="${market}" data-id="${h.id}" title="移除">✕</button></td>
     `;
     body.appendChild(tr);
   });
@@ -314,69 +364,87 @@ function renderHero(totals, lastSnapshot){
   }
 }
 
+// ---------- Pure-SVG charts (no external library — avoids CDN/CORS/ad-block failures) ----------
+function polarToCartesian(cx, cy, r, angleDeg){
+  const a = (angleDeg - 90) * Math.PI / 180;
+  return { x: cx + r*Math.cos(a), y: cy + r*Math.sin(a) };
+}
+function arcPath(cx, cy, r, startAngle, endAngle){
+  const start = polarToCartesian(cx, cy, r, startAngle);
+  const end = polarToCartesian(cx, cy, r, endAngle);
+  const largeArc = (endAngle - startAngle) > 180 ? 1 : 0;
+  return `M ${cx} ${cy} L ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${end.x.toFixed(2)} ${end.y.toFixed(2)} Z`;
+}
+
 function renderAllocChart(totals){
-  const ctx = document.getElementById('allocChart');
-  if(allocChart) allocChart.destroy();
-  allocChart = new Chart(ctx, {
-    type:'pie',
-    data:{
-      labels:['股票 / 股票型 ETF','債券 / 債券型 ETF'],
-      datasets:[{
-        data:[totals.equityTWD, totals.bondTWD],
-        backgroundColor:['#C9A227','#5B8DEF'],
-        borderColor:'#131926',
-        borderWidth:2
-      }]
-    },
-    options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      plugins:{
-        legend:{ display:false },
-        tooltip:{
-          callbacks:{
-            label: (ctx)=>{
-              const pct = (ctx.parsed / (totals.equityTWD+totals.bondTWD) * 100).toFixed(1);
-              return `${ctx.label}: NT$${fmt(ctx.parsed)} (${pct}%)`;
-            }
-          }
-        }
-      }
-    }
-  });
+  const wrap = document.getElementById('allocChartWrap');
+  const total = totals.equityTWD + totals.bondTWD;
+  if(total <= 0){
+    wrap.innerHTML = '<div class="empty-note" style="padding-top:90px;">尚無資料可顯示</div>';
+    return;
+  }
+  const cx=100, cy=100, r=90;
+  const equityPct = totals.equityTWD/total*100;
+  const bondPct = 100-equityPct;
+  let inner = '';
+  if(equityPct >= 99.95){
+    inner = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#C9A227"></circle>`;
+  } else if(bondPct >= 99.95){
+    inner = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#5B8DEF"></circle>`;
+  } else {
+    const equityAngle = equityPct/100*360;
+    inner = `<path d="${arcPath(cx,cy,r,0,equityAngle)}" fill="#C9A227"></path>` +
+            `<path d="${arcPath(cx,cy,r,equityAngle,360)}" fill="#5B8DEF"></path>`;
+  }
+  wrap.innerHTML = `
+    <svg viewBox="0 0 200 220" width="100%" height="100%">
+      ${inner}
+      <text x="100" y="205" text-anchor="middle" font-size="12" fill="#8B93A7">
+        股票 ${equityPct.toFixed(1)}% ・ 債券 ${bondPct.toFixed(1)}%
+      </text>
+    </svg>`;
 }
 
 function renderTrendChart(history){
-  const ctx = document.getElementById('trendChart');
+  const wrap = document.getElementById('trendChartWrap');
   const sub = document.getElementById('trendSub');
   if(!history.length){
     sub.textContent = '尚無歷史快照 — 週五記錄後開始累積走勢';
-  } else {
-    sub.textContent = `${history.length} 筆週快照，最早 ${history[0].date}`;
+    wrap.innerHTML = '<div class="empty-note" style="padding-top:90px;">尚無資料可顯示</div>';
+    return;
   }
-  if(trendChart) trendChart.destroy();
-  trendChart = new Chart(ctx, {
-    type:'line',
-    data:{
-      labels: history.map(s=>s.date),
-      datasets:[{
-        label:'總資產淨值 (NTD)',
-        data: history.map(s=>s.totalValue),
-        borderColor:'#C9A227',
-        backgroundColor:'rgba(201,162,39,0.12)',
-        fill:true, tension:0.25, pointRadius:3, pointBackgroundColor:'#C9A227'
-      }]
-    },
-    options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      plugins:{ legend:{ display:false } },
-      scales:{
-        x:{ ticks:{ color:'#8B93A7', font:{size:10} }, grid:{ color:'#232B3D' } },
-        y:{ ticks:{ color:'#8B93A7', font:{size:10}, callback:v=>fmt(v) }, grid:{ color:'#232B3D' } }
-      }
-    }
+  sub.textContent = `${history.length} 筆週快照，最早 ${history[0].date}`;
+  const w=440, h=200, padL=54, padR=14, padT=14, padB=26;
+  const values = history.map(s=>s.totalValue);
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = (max-min) || Math.max(1,max*0.1);
+  const plotW = w-padL-padR, plotH = h-padT-padB;
+  const stepX = history.length>1 ? plotW/(history.length-1) : 0;
+  const xy = values.map((v,i)=>{
+    const x = padL + i*stepX;
+    const y = padT + plotH - ((v-min)/range)*plotH;
+    return {x,y};
   });
+  const linePts = xy.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const areaPts = `${padL},${padT+plotH} ${linePts} ${xy[xy.length-1].x.toFixed(1)},${padT+plotH}`;
+  const dots = xy.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#C9A227"></circle>`).join('');
+  const gridLines = [0,0.5,1].map(f=>{
+    const y = padT + plotH*f;
+    const val = max - range*f;
+    return `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="#232B3D" stroke-width="1"></line>
+            <text x="${padL-8}" y="${y+4}" text-anchor="end" font-size="10" fill="#8B93A7">${fmt(val)}</text>`;
+  }).join('');
+  const firstLabel = history[0].date.slice(5);
+  const lastLabel = history[history.length-1].date.slice(5);
+  wrap.innerHTML = `
+    <svg viewBox="0 0 ${w} ${h}" width="100%" height="100%">
+      ${gridLines}
+      <polygon points="${areaPts}" fill="rgba(201,162,39,0.12)"></polygon>
+      <polyline points="${linePts}" fill="none" stroke="#C9A227" stroke-width="2"></polyline>
+      ${dots}
+      <text x="${padL}" y="${h-6}" font-size="10" fill="#8B93A7">${firstLabel}</text>
+      <text x="${w-padR}" y="${h-6}" text-anchor="end" font-size="10" fill="#8B93A7">${lastLabel}</text>
+    </svg>`;
 }
 
 function renderHistory(history){
@@ -395,105 +463,62 @@ function renderHistory(history){
   });
 }
 
-// NOTE: this standalone build uses plain browser localStorage instead of the
-// Claude-artifact window.storage API, so it works on any static host (GitHub
-// Pages, Netlify, Vercel...). Data is saved per-browser/device only — it will
-// NOT sync between your phone and computer, and clearing browser data erases it.
-async function loadHistory(){
-  try{
-    const raw = localStorage.getItem('asset_snapshots_weekly');
-    return raw ? JSON.parse(raw) : [];
-  }catch(e){
-    return [];
-  }
-}
-async function saveHistory(history){
-  try{
-    localStorage.setItem('asset_snapshots_weekly', JSON.stringify(history));
-  }catch(e){ console.error('storage set failed', e); }
-}
-async function loadState(){
-  try{
-    const raw = localStorage.getItem('asset_state');
-    return raw ? JSON.parse(raw) : null;
-  }catch(e){
-    return null;
-  }
-}
-async function saveState(){
-  try{
-    localStorage.setItem('asset_state', JSON.stringify(state));
-  }catch(e){ console.error('storage set failed', e); }
-}
-
-// Returns the ISO date string (YYYY-MM-DD) of the most recent Friday at/after 22:00
-// local time that has already passed relative to `now`.
-function mostRecentFriday10pm(now){
-  const d = new Date(now);
-  d.setSeconds(0,0);
-  // Find this week's Friday (day 5, Sun=0..Sat=6)
-  const day = d.getDay();
-  let diffToFriday = day - 5; // positive if we're past Friday in the week, negative if before
-  const candidate = new Date(d);
-  candidate.setDate(d.getDate() - diffToFriday);
-  candidate.setHours(22,0,0,0);
-  if(candidate > now){
-    // this week's Friday 22:00 hasn't happened yet -> use previous week's Friday
-    candidate.setDate(candidate.getDate() - 7);
-  }
-  return candidate;
-}
-function toDateStr(d){
-  const y = d.getFullYear();
-  const m = String(d.getMonth()+1).padStart(2,'0');
-  const day = String(d.getDate()).padStart(2,'0');
-  return `${y}-${m}-${day}`;
-}
-
-let history = [];
-
 async function fullRender(){
   const totals = computeTotals();
   const lastSnapshot = history.length ? history[history.length-1] : null;
-  renderTable('twBody', state.tw, 'NT$');
-  renderTable('usBody', state.us, '$');
+  renderTable('twBody', state.tw, 'NT$', 'tw');
+  renderTable('usBody', state.us, '$', 'us');
   renderHero(totals, lastSnapshot);
   renderAllocChart(totals);
   renderTrendChart(history);
   renderHistory(history);
 }
 
-document.addEventListener('input', (e)=>{
-  if(e.target.id === 'fxRate'){
-    state.fx = parseFloat(e.target.value) || 0;
-    saveState();
-    fullRender();
-  }
-  if(e.target.classList.contains('price-input')){
-    const bodyId = e.target.dataset.body;
-    const idx = parseInt(e.target.dataset.idx);
-    const arr = bodyId === 'twBody' ? state.tw : state.us;
-    arr[idx].price = parseFloat(e.target.value) || 0;
-    saveState();
-    fullRender();
-  }
-});
+// ---------- Persistence (plain browser localStorage — works on any static host) ----------
+async function loadHistory(){
+  try{ const raw = localStorage.getItem('asset_snapshots_weekly'); return raw ? JSON.parse(raw) : []; }
+  catch(e){ return []; }
+}
+async function saveHistory(h){
+  try{ localStorage.setItem('asset_snapshots_weekly', JSON.stringify(h)); }
+  catch(e){ console.error('storage set failed', e); }
+}
+async function loadState(){
+  try{ const raw = localStorage.getItem('asset_state'); return raw ? JSON.parse(raw) : null; }
+  catch(e){ return null; }
+}
+async function saveState(){
+  try{ localStorage.setItem('asset_state', JSON.stringify(state)); }
+  catch(e){ console.error('storage set failed', e); }
+}
 
+// ---------- Weekly snapshot ----------
+function mostRecentFriday10pm(now){
+  const d = new Date(now); d.setSeconds(0,0);
+  const day = d.getDay();
+  const candidate = new Date(d);
+  candidate.setDate(d.getDate() - (day-5));
+  candidate.setHours(22,0,0,0);
+  if(candidate > now) candidate.setDate(candidate.getDate()-7);
+  return candidate;
+}
+function toDateStr(d){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 async function recordSnapshot(dateStr, auto){
   const totals = computeTotals();
-  const idx = history.findIndex(s=>s.date === dateStr);
-  const snapshot = { date: dateStr, totalValue: totals.totalValue, totalCost: totals.totalCost, auto: !!auto };
-  if(idx >= 0){ history[idx] = snapshot; } else { history.push(snapshot); }
-  history.sort((a,b)=> a.date.localeCompare(b.date));
+  const idx = history.findIndex(s=>s.date===dateStr);
+  const snap = { date:dateStr, totalValue:totals.totalValue, totalCost:totals.totalCost, auto:!!auto };
+  if(idx>=0) history[idx]=snap; else history.push(snap);
+  history.sort((a,b)=>a.date.localeCompare(b.date));
   await saveHistory(history);
 }
 
-// --- Live price fetching (best-effort; relies on free/public sources that
-// may rate-limit or go offline without notice — manual price entry always
-// remains available as a fallback if these fail) ---
-
+// ---------- Live price fetching (best-effort public/free sources) ----------
 async function fetchTwPrices(){
-  const codes = state.tw.map(h=>h.code);
+  if(!state.tw.length) return 0;
+  const codes = state.tw.map(h=>h.code).filter(Boolean);
+  if(!codes.length) return 0;
   const query = codes.map(c=>`tse_${c}.tw`).concat(codes.map(c=>`otc_${c}.tw`)).join('|');
   const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(query)}&json=1&delay=0`;
   const res = await fetch(url);
@@ -502,20 +527,19 @@ async function fetchTwPrices(){
   const list = data.msgArray || [];
   const priceByCode = {};
   list.forEach(item=>{
-    const code = item.c;
     const raw = (item.z && item.z !== '-') ? item.z : item.y;
     const price = raw ? parseFloat(raw) : null;
-    if(price && !isNaN(price) && !(code in priceByCode)) priceByCode[code] = price;
+    if(price && !isNaN(price) && !(item.c in priceByCode)) priceByCode[item.c] = price;
   });
   let updated = 0;
   state.tw.forEach(h=>{
-    if(priceByCode[h.code] != null){ h.price = priceByCode[h.code]; updated++; }
+    if(h.code && priceByCode[h.code] != null){ h.price = priceByCode[h.code]; updated++; }
   });
   return updated;
 }
 
 async function fetchOneUsQuote(ticker){
-  const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`;
+  const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}`;
   const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`;
   const res = await fetch(proxied);
   if(!res.ok) throw new Error('回應錯誤 ' + res.status);
@@ -530,13 +554,9 @@ async function fetchUsPrices(){
   let updated = 0;
   const failed = [];
   for(const h of state.us){
-    if(h.optionContract) continue;
-    try{
-      h.price = await fetchOneUsQuote(h.name);
-      updated++;
-    }catch(e){
-      failed.push(h.name);
-    }
+    if(h.optionContract || !h.code) continue;
+    try{ h.price = await fetchOneUsQuote(h.code); updated++; }
+    catch(e){ failed.push(h.name); }
   }
   return { updated, failed };
 }
@@ -548,34 +568,88 @@ async function refreshLivePrices(){
   try{
     const n = await fetchTwPrices();
     twMsg = `台股已更新 ${n}/${state.tw.length} 檔`;
-  }catch(e){
-    twMsg = '台股更新失敗（來源目前無法連線）';
-  }
+  }catch(e){ twMsg = '台股更新失敗（來源目前無法連線）'; }
   try{
     const { updated, failed } = await fetchUsPrices();
     usMsg = `美股已更新 ${updated} 檔` + (failed.length ? `，失敗：${failed.join('、')}` : '');
-  }catch(e){
-    usMsg = '美股更新失敗（來源目前無法連線）';
-  }
+  }catch(e){ usMsg = '美股更新失敗（來源目前無法連線）'; }
   await saveState();
   await fullRender();
   const now = new Date();
-  statusEl.textContent = `${twMsg}；${usMsg}（${now.toLocaleTimeString('zh-TW')} 更新，未抓到的可自行手動輸入）`;
+  statusEl.textContent = `${twMsg}；${usMsg}（${now.toLocaleTimeString('zh-TW')} 更新）`;
 }
+
+// ---------- Add / remove holdings ----------
+function addHolding(market, holding){
+  state[market].push(holding);
+  saveState();
+  fullRender();
+}
+function removeHolding(market, id){
+  state[market] = state[market].filter(h=>h.id!==id);
+  saveState();
+  fullRender();
+}
+
+document.getElementById('twAddBtn').addEventListener('click', ()=>{
+  const code = document.getElementById('twAddCode').value.trim();
+  const name = document.getElementById('twAddName').value.trim() || code;
+  const qty = parseFloat(document.getElementById('twAddQty').value);
+  const cost = parseFloat(document.getElementById('twAddCost').value) || 0;
+  const price = parseFloat(document.getElementById('twAddPrice').value) || 0;
+  const category = document.getElementById('twAddCategory').value;
+  if(!code || !qty){ alert('請至少填寫代號與股數'); return; }
+  addHolding('tw', { id:uid('tw'), name, code, qty, cost: cost||price*qty, price, category });
+  ['twAddCode','twAddName','twAddQty','twAddCost','twAddPrice'].forEach(id=>document.getElementById(id).value='');
+  refreshLivePrices();
+});
+
+document.getElementById('usAddBtn').addEventListener('click', ()=>{
+  const code = document.getElementById('usAddCode').value.trim().toUpperCase();
+  const qty = parseFloat(document.getElementById('usAddQty').value);
+  const cost = parseFloat(document.getElementById('usAddCost').value) || 0;
+  const price = parseFloat(document.getElementById('usAddPrice').value) || 0;
+  const category = document.getElementById('usAddCategory').value;
+  if(!code || !qty){ alert('請至少填寫 Ticker 與股數'); return; }
+  addHolding('us', { id:uid('us'), name:code, code, qty, cost: cost||price*qty, price, category });
+  ['usAddCode','usAddQty','usAddCost','usAddPrice'].forEach(id=>document.getElementById(id).value='');
+  refreshLivePrices();
+});
+
+document.addEventListener('click', (e)=>{
+  if(e.target.classList.contains('remove-btn')){
+    const market = e.target.dataset.market;
+    const id = e.target.dataset.id;
+    if(confirm('確定要移除這筆持倉嗎？')) removeHolding(market, id);
+  }
+});
+
+document.addEventListener('input', (e)=>{
+  if(e.target.id === 'fxRate'){
+    state.fx = parseFloat(e.target.value) || 0;
+    saveState(); fullRender();
+  }
+  if(e.target.classList.contains('price-input')){
+    const market = e.target.dataset.market;
+    const id = e.target.dataset.id;
+    const h = state[market].find(x=>x.id===id);
+    if(h){ h.price = parseFloat(e.target.value) || 0; saveState(); fullRender(); }
+  }
+});
 
 document.getElementById('refreshBtn').addEventListener('click', refreshLivePrices);
 
 document.getElementById('saveBtn').addEventListener('click', async ()=>{
   const fridayDate = toDateStr(mostRecentFriday10pm(new Date()));
   await recordSnapshot(fridayDate, false);
-  await saveState();
   await fullRender();
   const msg = document.getElementById('saveMsg');
-  msg.classList.add('show');
-  setTimeout(()=>msg.classList.remove('show'), 1800);
+  msg.style.opacity = 1;
+  setTimeout(()=>msg.style.opacity = 0, 1800);
 });
 
 document.getElementById('resetBtn').addEventListener('click', async ()=>{
+  if(!confirm('確定要還原成預設的持倉清單嗎？您新增/移除/修改的內容會被清除。')) return;
   state = JSON.parse(JSON.stringify(INITIAL_STATE));
   document.getElementById('fxRate').value = state.fx;
   await saveState();
@@ -583,36 +657,18 @@ document.getElementById('resetBtn').addEventListener('click', async ()=>{
 });
 
 (async function init(){
-  // Merge only the user-editable fields (fx rate, per-holding price) from any
-  // previously saved data onto the current INITIAL_STATE. This avoids stale
-  // saved data from an older version of this page (e.g. missing the
-  // stock/bond `category` field) from overwriting today's structure.
-  state = JSON.parse(JSON.stringify(INITIAL_STATE));
-  const savedState = await loadState();
-  if(savedState){
-    if(typeof savedState.fx === 'number') state.fx = savedState.fx;
-    ['tw','us'].forEach(key=>{
-      if(!Array.isArray(savedState[key])) return;
-      state[key].forEach((h, idx)=>{
-        const saved = savedState[key][idx];
-        if(saved && saved.name === h.name && typeof saved.price === 'number'){
-          h.price = saved.price;
-        }
-      });
-    });
+  const saved = await loadState();
+  if(saved && Array.isArray(saved.tw) && Array.isArray(saved.us)){
+    state = saved;
   }
   document.getElementById('fxRate').value = state.fx;
   history = await loadHistory();
 
-  // Auto weekly snapshot: if the most recent Friday 22:00 has passed and
-  // hasn't been recorded yet, log it now using the currently-set prices.
   const now = new Date();
   const targetFriday = mostRecentFriday10pm(now);
   const targetDateStr = toDateStr(targetFriday);
-  const alreadyRecorded = history.some(s=>s.date === targetDateStr);
-  if(now >= targetFriday && !alreadyRecorded){
+  if(now >= targetFriday && !history.some(s=>s.date===targetDateStr)){
     await recordSnapshot(targetDateStr, true);
-    history = await loadHistory();
   }
 
   await fullRender();
