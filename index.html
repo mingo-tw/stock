@@ -97,12 +97,14 @@
   }
   .tag-equity{background:rgba(201,162,39,0.15);color:var(--equity);}
   .tag-bond{background:rgba(91,141,239,0.15);color:var(--bond);}
-  input.price-input{
+  
+  input.price-input, input.qty-input{
     width:84px;background:var(--surface-2);border:1px solid var(--border);
     color:var(--text);border-radius:6px;padding:4px 6px;font-size:13px;
     text-align:right;font-family:inherit;
   }
-  input.price-input:focus{outline:1px solid var(--accent);}
+  input.price-input:focus, input.qty-input:focus{outline:1px solid var(--accent);}
+  
   .remove-btn{
     background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:15px;
     padding:2px 6px;border-radius:6px;line-height:1;
@@ -164,7 +166,7 @@
 <div class="wrap">
 
   <h1>資產配置與走勢</h1>
-  <p class="subtitle">台股 + 美股持倉整合檢視 · 可自行新增/移除持倉 · 每週五記錄一次快照</p>
+  <p class="subtitle">台股 + 美股持倉整合檢視 · 可自行新增/移除/修改持倉 · 每週五記錄一次快照</p>
 
   <div class="hero">
     <div class="hero-label">總資產淨值（換算新台幣）</div>
@@ -215,7 +217,7 @@
       <label>名稱<input type="text" id="twAddName" placeholder="元大台灣50"></label>
       <label>股數<input type="number" id="twAddQty" step="any" placeholder="1000"></label>
       <label>成本(選填)<input type="number" id="twAddCost" step="any" placeholder="總成本"></label>
-      <label>現價(選填)<input type="number" id="twAddPrice" step="any" placeholder="先手動填,之後會嘗試自動更新"></label>
+      <label>現價(選填)<input type="number" id="twAddPrice" step="any" placeholder="手動填/自動更新"></label>
       <label>類別
         <select id="twAddCategory"><option value="equity">股票</option><option value="bond">債券</option></select>
       </label>
@@ -231,7 +233,7 @@
       <label>代號 Ticker<input type="text" id="usAddCode" placeholder="AAPL"></label>
       <label>股數<input type="number" id="usAddQty" step="any" placeholder="10"></label>
       <label>成本(選填)<input type="number" id="usAddCost" step="any" placeholder="總成本"></label>
-      <label>現價(選填)<input type="number" id="usAddPrice" step="any" placeholder="先手動填,之後會嘗試自動更新"></label>
+      <label>現價(選填)<input type="number" id="usAddPrice" step="any" placeholder="手動填/自動更新"></label>
       <label>類別
         <select id="usAddCategory"><option value="equity">股票</option><option value="bond">債券</option></select>
       </label>
@@ -253,13 +255,9 @@
   </div>
 
   <div class="note">
-    <b>關於新增的股票能不能自動追蹤最新股價：</b>可以，只要代號輸入正確——台股會透過證交所公開的即時行情介面查詢（自動同時嘗試上市／上櫃），
-    美股會透過 Yahoo Finance（經公開代理服務轉接）用您輸入的 Ticker 查詢。這兩個都是免費、不需金鑰的公開服務，不是官方保證的穩定 API，
-    有可能哪天忽然失效或找不到某些代號；查不到的話畫面會顯示「失敗」，現價欄位可以隨時手動修改當備案，不影響其他功能。
+    <b>關於新增的股票能不能自動追蹤最新股價：</b>可以，只要代號輸入正確。台股會透過證交所開放介面查詢，美股會透過 Yahoo Finance 公開數據查詢。若特定標的因跨域問題或服務異動查不到，現價欄位隨時可以手動修改備案，不影響計算。
     <br><br>
-    <b>關於「每週五自動記錄」：</b>這個頁面沒辦法在您沒打開它的時候於背景自己醒來記錄。只要您在週五晚上 10 點之後
-    （或之後任何一天）打開這個頁面，就會自動把當下的現價換算成當週快照存起來，同一週只記一次；忘記的話可以用
-    「手動記錄本週快照」補記。
+    <b>關於手動修改：</b>您可以在表格中隨時點擊修改<b>「股數」</b>與<b>「現價」</b>，系統會即時重新計算市值並自動儲存。
   </div>
 
 </div>
@@ -271,8 +269,7 @@ function uid(prefix){
   return prefix + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 }
 
-// ---------- Initial holdings (transcribed from the uploaded screenshots) ----------
-// category: 'equity' (股票/股票型ETF) or 'bond' (債券/債券型ETF)
+// ---------- Initial holdings ----------
 const INITIAL_STATE = {
   fx: 31.5,
   tw: [
@@ -303,11 +300,11 @@ function computeTotals(){
   let twValue=0, twCost=0, usValueUSD=0, usCostUSD=0;
   let equityTWD=0, bondTWD=0;
   state.tw.forEach(h=>{
-    h.value = h.qty*h.price; twValue+=h.value; twCost+=h.cost;
+    h.value = h.qty * h.price; twValue+=h.value; twCost+=h.cost;
     if(h.category==='bond') bondTWD += h.value; else equityTWD += h.value;
   });
   state.us.forEach(h=>{
-    h.value = h.qty*h.price; usValueUSD+=h.value; usCostUSD+=h.cost;
+    h.value = h.qty * h.price; usValueUSD+=h.value; usCostUSD+=h.cost;
     const valueTWD = h.value*fx;
     if(h.category==='bond') bondTWD += valueTWD; else equityTWD += valueTWD;
   });
@@ -318,7 +315,7 @@ function computeTotals(){
   return { twValue, twCost, usValueUSD, usCostUSD, usValueTWD, usCostTWD, totalValue, totalCost, equityTWD, bondTWD };
 }
 
-// ---------- Table rendering ----------
+// ---------- Table rendering (with editable QTY & PRICE) ----------
 function renderTable(bodyId, holdings, currencySymbol, market){
   const body = document.getElementById(bodyId);
   body.innerHTML = '';
@@ -336,8 +333,12 @@ function renderTable(bodyId, holdings, currencySymbol, market){
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><span class="name">${h.name}</span><span class="tag ${tagClass}">${tagLabel}</span>${codeLine?`<span class="code">${codeLine}</span>`:''}</td>
-      <td style="text-align:right;">${h.qty < 1 ? h.qty : fmt(h.qty)}</td>
-      <td style="text-align:right;"><input class="price-input" type="number" step="any" value="${h.price}" data-market="${market}" data-id="${h.id}"></td>
+      <td style="text-align:right;">
+        <input class="qty-input" type="number" step="any" value="${h.qty}" data-market="${market}" data-id="${h.id}">
+      </td>
+      <td style="text-align:right;">
+        <input class="price-input" type="number" step="any" value="${h.price}" data-market="${market}" data-id="${h.id}">
+      </td>
       <td style="text-align:right;">${currencySymbol}${fmt(h.value)}</td>
       <td style="text-align:right;" class="${pnlClass}">${pnl>=0?'+':''}${fmt(pnl)} (${pnlPct.toFixed(1)}%)</td>
       <td style="text-align:right;"><button class="remove-btn" data-market="${market}" data-id="${h.id}" title="移除">✕</button></td>
@@ -364,7 +365,7 @@ function renderHero(totals, lastSnapshot){
   }
 }
 
-// ---------- Pure-SVG charts (no external library — avoids CDN/CORS/ad-block failures) ----------
+// ---------- SVG Charts ----------
 function polarToCartesian(cx, cy, r, angleDeg){
   const a = (angleDeg - 90) * Math.PI / 180;
   return { x: cx + r*Math.cos(a), y: cy + r*Math.sin(a) };
@@ -474,7 +475,7 @@ async function fullRender(){
   renderHistory(history);
 }
 
-// ---------- Persistence (plain browser localStorage — works on any static host) ----------
+// ---------- Persistence ----------
 async function loadHistory(){
   try{ const raw = localStorage.getItem('asset_snapshots_weekly'); return raw ? JSON.parse(raw) : []; }
   catch(e){ return []; }
@@ -514,23 +515,28 @@ async function recordSnapshot(dateStr, auto){
   await saveHistory(history);
 }
 
-// ---------- Live price fetching (best-effort public/free sources) ----------
+// ---------- Fixed Live Price Fetching (CORS & API Proxy Handlers) ----------
 async function fetchTwPrices(){
   if(!state.tw.length) return 0;
   const codes = state.tw.map(h=>h.code).filter(Boolean);
   if(!codes.length) return 0;
+  
   const query = codes.map(c=>`tse_${c}.tw`).concat(codes.map(c=>`otc_${c}.tw`)).join('|');
-  const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(query)}&json=1&delay=0`;
-  const res = await fetch(url);
+  const targetUrl = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(query)}&json=1&delay=0`;
+  const proxiedUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+  
+  const res = await fetch(proxiedUrl);
   if(!res.ok) throw new Error('回應錯誤 ' + res.status);
   const data = await res.json();
   const list = data.msgArray || [];
   const priceByCode = {};
+  
   list.forEach(item=>{
     const raw = (item.z && item.z !== '-') ? item.z : item.y;
     const price = raw ? parseFloat(raw) : null;
     if(price && !isNaN(price) && !(item.c in priceByCode)) priceByCode[item.c] = price;
   });
+  
   let updated = 0;
   state.tw.forEach(h=>{
     if(h.code && priceByCode[h.code] != null){ h.price = priceByCode[h.code]; updated++; }
@@ -539,15 +545,30 @@ async function fetchTwPrices(){
 }
 
 async function fetchOneUsQuote(ticker){
-  const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}`;
+  // Primary endpoint: v7 quote endpoint via AllOrigins CORS proxy
+  const yahooUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(ticker)}`;
   const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`;
-  const res = await fetch(proxied);
-  if(!res.ok) throw new Error('回應錯誤 ' + res.status);
-  const data = await res.json();
-  const price = data && data.chart && data.chart.result && data.chart.result[0]
-    ? data.chart.result[0].meta.regularMarketPrice : undefined;
-  if(typeof price !== 'number') throw new Error('無法解析價格');
-  return price;
+  
+  try {
+    const res = await fetch(proxied);
+    if(res.ok) {
+      const data = await res.json();
+      const result = data?.quoteResponse?.result?.[0];
+      const price = result?.regularMarketPrice;
+      if(typeof price === 'number') return price;
+    }
+  } catch(e) {
+    // Failover endpoint: v8 chart endpoint
+  }
+
+  const backupUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}`;
+  const backupProxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(backupUrl)}`;
+  const res2 = await fetch(backupProxied);
+  if(!res2.ok) throw new Error('回應錯誤 ' + res2.status);
+  const data2 = await res2.json();
+  const price2 = data2?.chart?.result?.[0]?.meta?.regularMarketPrice;
+  if(typeof price2 !== 'number') throw new Error('無法解析價格');
+  return price2;
 }
 
 async function fetchUsPrices(){
@@ -555,8 +576,12 @@ async function fetchUsPrices(){
   const failed = [];
   for(const h of state.us){
     if(h.optionContract || !h.code) continue;
-    try{ h.price = await fetchOneUsQuote(h.code); updated++; }
-    catch(e){ failed.push(h.name); }
+    try{ 
+      h.price = await fetchOneUsQuote(h.code); 
+      updated++; 
+    } catch(e){ 
+      failed.push(h.code || h.name); 
+    }
   }
   return { updated, failed };
 }
@@ -565,21 +590,28 @@ async function refreshLivePrices(){
   const statusEl = document.getElementById('refreshStatus');
   statusEl.textContent = '更新中…';
   let twMsg, usMsg;
+  
   try{
     const n = await fetchTwPrices();
     twMsg = `台股已更新 ${n}/${state.tw.length} 檔`;
-  }catch(e){ twMsg = '台股更新失敗（來源目前無法連線）'; }
+  }catch(e){ 
+    twMsg = '台股更新失敗（來源連線異常）'; 
+  }
+  
   try{
     const { updated, failed } = await fetchUsPrices();
     usMsg = `美股已更新 ${updated} 檔` + (failed.length ? `，失敗：${failed.join('、')}` : '');
-  }catch(e){ usMsg = '美股更新失敗（來源目前無法連線）'; }
+  }catch(e){ 
+    usMsg = '美股更新失敗（來源連線異常）'; 
+  }
+  
   await saveState();
   await fullRender();
   const now = new Date();
   statusEl.textContent = `${twMsg}；${usMsg}（${now.toLocaleTimeString('zh-TW')} 更新）`;
 }
 
-// ---------- Add / remove holdings ----------
+// ---------- Add / remove / update holdings ----------
 function addHolding(market, holding){
   state[market].push(holding);
   saveState();
@@ -598,7 +630,7 @@ document.getElementById('twAddBtn').addEventListener('click', ()=>{
   const cost = parseFloat(document.getElementById('twAddCost').value) || 0;
   const price = parseFloat(document.getElementById('twAddPrice').value) || 0;
   const category = document.getElementById('twAddCategory').value;
-  if(!code || !qty){ alert('請至少填寫代號與股數'); return; }
+  if(!code || isNaN(qty)){ alert('請填寫正確的代號與股數'); return; }
   addHolding('tw', { id:uid('tw'), name, code, qty, cost: cost||price*qty, price, category });
   ['twAddCode','twAddName','twAddQty','twAddCost','twAddPrice'].forEach(id=>document.getElementById(id).value='');
   refreshLivePrices();
@@ -610,7 +642,7 @@ document.getElementById('usAddBtn').addEventListener('click', ()=>{
   const cost = parseFloat(document.getElementById('usAddCost').value) || 0;
   const price = parseFloat(document.getElementById('usAddPrice').value) || 0;
   const category = document.getElementById('usAddCategory').value;
-  if(!code || !qty){ alert('請至少填寫 Ticker 與股數'); return; }
+  if(!code || isNaN(qty)){ alert('請填寫正確的 Ticker 與股數'); return; }
   addHolding('us', { id:uid('us'), name:code, code, qty, cost: cost||price*qty, price, category });
   ['usAddCode','usAddQty','usAddCost','usAddPrice'].forEach(id=>document.getElementById(id).value='');
   refreshLivePrices();
@@ -624,6 +656,7 @@ document.addEventListener('click', (e)=>{
   }
 });
 
+// Event listener for live updates (Price & Qty)
 document.addEventListener('input', (e)=>{
   if(e.target.id === 'fxRate'){
     state.fx = parseFloat(e.target.value) || 0;
@@ -634,6 +667,12 @@ document.addEventListener('input', (e)=>{
     const id = e.target.dataset.id;
     const h = state[market].find(x=>x.id===id);
     if(h){ h.price = parseFloat(e.target.value) || 0; saveState(); fullRender(); }
+  }
+  if(e.target.classList.contains('qty-input')){
+    const market = e.target.dataset.market;
+    const id = e.target.dataset.id;
+    const h = state[market].find(x=>x.id===id);
+    if(h){ h.qty = parseFloat(e.target.value) || 0; saveState(); fullRender(); }
   }
 });
 
