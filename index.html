@@ -156,7 +156,7 @@
 <div class="wrap">
 
   <h1>資產配置與走勢</h1>
-  <p class="subtitle">台股 + 美股持倉整合檢視 · 即時計算與輸入修復版</p>
+  <p class="subtitle">台股 + 美股持倉整合檢視 · 輸入資料保存修正版</p>
 
   <div class="hero">
     <div class="hero-label">總資產淨值（換算新台幣）</div>
@@ -305,6 +305,26 @@ const INITIAL_STATE = {
 let state = JSON.parse(JSON.stringify(INITIAL_STATE));
 let history = [];
 
+// 強制將目前所有 Input 內的文字讀回 state 中
+function syncInputsToState(){
+  ['tw', 'us'].forEach(market => {
+    state[market].forEach(h => {
+      const tr = document.querySelector(`tr[data-tr-id="${h.id}"]`);
+      if(tr){
+        const qEl = tr.querySelector('.qty-input');
+        const cEl = tr.querySelector('.avgcost-input');
+        const pEl = tr.querySelector('.price-input');
+        
+        if(qEl) h.qty = parseFloat(qEl.value) || 0;
+        if(cEl) h.avgCost = parseFloat(cEl.value) || 0;
+        if(pEl) h.price = parseFloat(pEl.value) || 0;
+      }
+    });
+  });
+  const fxEl = document.getElementById('fxRate');
+  if(fxEl) state.fx = parseFloat(fxEl.value) || 31.5;
+}
+
 function computeTotals(){
   const fx = state.fx;
   let twValue=0, twCost=0, usValueUSD=0, usCostUSD=0;
@@ -366,7 +386,7 @@ function renderTable(bodyId, holdings, currencySymbol, market){
 function updateCalculatedDisplays(){
   const totals = computeTotals();
 
-  // 更新單列市值與損益（不重繪 input）
+  // 更新單列市值與損益（不用重構 DOM，直接替換數字文字）
   ['tw', 'us'].forEach(market => {
     const symbol = market === 'tw' ? 'NT$' : '$';
     state[market].forEach(h => {
@@ -388,7 +408,7 @@ function updateCalculatedDisplays(){
     });
   });
 
-  // 更新頂部英雄區
+  // 更新頂部英雄區資訊
   document.getElementById('heroTotal').textContent = 'NT$ ' + fmt(totals.totalValue);
   const pnl = totals.totalValue - totals.totalCost;
   const pnlEl = document.getElementById('totalPnl');
@@ -405,7 +425,7 @@ function updateCalculatedDisplays(){
     deltaEl.textContent = '無快照';
   }
 
-  // 更新資產配置條
+  // 更新資產配置條與明細
   const eqPct = totals.totalValue ? (totals.equityTWD / totals.totalValue * 100) : 0;
   const bdPct = totals.totalValue ? (totals.bondTWD / totals.totalValue * 100) : 0;
   
@@ -440,9 +460,11 @@ function renderHistory(){
 }
 
 function saveState(){ 
+  syncInputsToState();
   localStorage.setItem('asset_state', JSON.stringify(state)); 
   localStorage.setItem('asset_history', JSON.stringify(history)); 
 }
+
 function loadState(){
   try{ 
     const rawState = localStorage.getItem('asset_state');
@@ -452,35 +474,21 @@ function loadState(){
   }catch(e){}
 }
 
-// 全域即時監聽 input 輸入事件（核心修正：動態更新狀態與數值，不重構表格 DOM）
+// 監聽表格內的輸入變更，打字時立刻試算
 document.addEventListener('input', (e)=>{
   const target = e.target;
   if(target.classList.contains('price-input') || target.classList.contains('qty-input') || target.classList.contains('avgcost-input')){
-    const market = target.dataset.market;
-    const id = target.dataset.id;
-    const h = state[market].find(x => x.id === id);
-    if(h){
-      const val = parseFloat(target.value);
-      const num = Number.isFinite(val) && val >= 0 ? val : 0;
-      if (target.classList.contains('qty-input')) h.qty = num;
-      else if (target.classList.contains('avgcost-input')) h.avgCost = num;
-      else if (target.classList.contains('price-input')) h.price = num;
-      
-      updateCalculatedDisplays();
-      saveState();
-    }
+    syncInputsToState();
+    updateCalculatedDisplays();
   } else if(target.id === 'fxRate'){
-    const fxVal = parseFloat(target.value);
-    if(Number.isFinite(fxVal) && fxVal > 0){
-      state.fx = fxVal;
-      updateCalculatedDisplays();
-      saveState();
-    }
+    syncInputsToState();
+    updateCalculatedDisplays();
   }
 });
 
 // 線上更新股價
 document.getElementById('refreshBtn').addEventListener('click', async ()=>{
+  syncInputsToState();
   const statusEl = document.getElementById('refreshStatus');
   statusEl.textContent = '⏳ 正在線上更新最新股價中...';
   
@@ -521,6 +529,7 @@ document.getElementById('refreshBtn').addEventListener('click', async ()=>{
 
 // 新增台股
 document.getElementById('twAddBtn').addEventListener('click', ()=>{
+  syncInputsToState();
   const code = document.getElementById('twAddCode').value.trim();
   const name = document.getElementById('twAddName').value.trim() || code;
   const qty = parseFloat(document.getElementById('twAddQty').value) || 0;
@@ -536,6 +545,7 @@ document.getElementById('twAddBtn').addEventListener('click', ()=>{
 
 // 新增美股
 document.getElementById('usAddBtn').addEventListener('click', ()=>{
+  syncInputsToState();
   const code = document.getElementById('usAddCode').value.trim().toUpperCase();
   const qty = parseFloat(document.getElementById('usAddQty').value) || 0;
   const avgCost = parseFloat(document.getElementById('usAddAvgCost').value) || 0;
@@ -554,6 +564,7 @@ document.addEventListener('click', (e)=>{
     const market = e.target.dataset.market;
     const id = e.target.dataset.id;
     if(confirm('確定要移除這筆持倉嗎？')){
+      syncInputsToState();
       state[market] = state[market].filter(h=>h.id!==id);
       saveState(); fullRender();
     }
@@ -562,6 +573,7 @@ document.addEventListener('click', (e)=>{
 
 // 手動記錄快照
 document.getElementById('snapshotBtn').addEventListener('click', ()=>{
+  saveState();
   const totals = computeTotals();
   const now = new Date();
   const dateStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
@@ -571,7 +583,7 @@ document.getElementById('snapshotBtn').addEventListener('click', ()=>{
   alert('已成功新增本週快照記錄！');
 });
 
-// 儲存所有修改按鈕
+// 💾 儲存所有修改按鈕
 document.getElementById('updateAndSaveAllBtn').addEventListener('click', ()=>{
   saveState();
   fullRender();
@@ -580,12 +592,14 @@ document.getElementById('updateAndSaveAllBtn').addEventListener('click', ()=>{
   setTimeout(()=>msg.style.opacity = 0, 2000);
 });
 
-// 還原預設
+// 還原預設資料
 document.getElementById('resetBtn').addEventListener('click', ()=>{
   if(confirm('確定要還原成預設資料嗎？')){
     state = JSON.parse(JSON.stringify(INITIAL_STATE));
     history = [];
-    saveState(); fullRender();
+    localStorage.removeItem('asset_state');
+    localStorage.removeItem('asset_history');
+    fullRender();
   }
 });
 
