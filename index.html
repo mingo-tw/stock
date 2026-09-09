@@ -155,7 +155,7 @@
 <div class="wrap">
 
   <h1>資產配置與走勢</h1>
-  <p class="subtitle">台股 + 美股持倉整合檢視 · 強力防自動填入版</p>
+  <p class="subtitle">台股 + 美股持倉整合檢視 · 精準狀態重構版</p>
 
   <div class="hero">
     <div class="hero-label">總資產淨值（換算新台幣）</div>
@@ -193,7 +193,7 @@
     
     <div class="fx-row">
       美元兌台幣匯率
-      <input type="text" inputmode="decimal" id="fxRate" value="31.5" autocomplete="off" data-lpignore="true">
+      <input type="text" inputmode="decimal" id="fxRate" value="31.5" autocomplete="off">
       <span style="color:var(--text-dim);font-size:12px;">（用於將美股帳戶換算為台幣）</span>
     </div>
 
@@ -273,7 +273,7 @@
 </div>
 
 <script>
-const fmt = n => Math.round(n).toLocaleString('en-US');
+const fmt = n => Math.round(n || 0).toLocaleString('en-US');
 function uid(prefix){ return prefix + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
 const INITIAL_STATE = {
@@ -300,44 +300,25 @@ const INITIAL_STATE = {
 let state = JSON.parse(JSON.stringify(INITIAL_STATE));
 let history = [];
 
-function syncInputsToState(){
-  ['tw', 'us'].forEach(market => {
-    state[market].forEach(h => {
-      const tr = document.querySelector(`tr[data-tr-id="${h.id}"]`);
-      if(tr){
-        const qEl = tr.querySelector('.qty-input');
-        const cEl = tr.querySelector('.avgcost-input');
-        const pEl = tr.querySelector('.price-input');
-        
-        if(qEl && qEl.value !== '') h.qty = parseFloat(qEl.value) || 0;
-        if(cEl && cEl.value !== '') h.avgCost = parseFloat(cEl.value) || 0;
-        if(pEl && pEl.value !== '') h.price = parseFloat(pEl.value) || 0;
-      }
-    });
-  });
-  const fxEl = document.getElementById('fxRate');
-  if(fxEl) state.fx = parseFloat(fxEl.value) || 31.5;
-}
-
 function computeTotals(){
-  const fx = state.fx;
+  const fx = state.fx || 31.5;
   let twValue=0, twCost=0, usValueUSD=0, usCostUSD=0;
   let equityTWD=0, bondTWD=0;
 
   state.tw.forEach(h=>{ 
-    h.value = h.qty * h.price; 
-    h.cost = h.qty * (h.avgCost || 0);
-    twValue += h.value; 
-    twCost += h.cost; 
-    if(h.category === 'bond') bondTWD += h.value; else equityTWD += h.value;
+    const val = (h.qty || 0) * (h.price || 0); 
+    const cost = (h.qty || 0) * (h.avgCost || 0);
+    twValue += val; 
+    twCost += cost; 
+    if(h.category === 'bond') bondTWD += val; else equityTWD += val;
   });
   
   state.us.forEach(h=>{ 
-    h.value = h.qty * h.price; 
-    h.cost = h.qty * (h.avgCost || 0);
-    usValueUSD += h.value; 
-    usCostUSD += h.cost; 
-    const valTWD = h.value * fx;
+    const valUSD = (h.qty || 0) * (h.price || 0); 
+    const costUSD = (h.qty || 0) * (h.avgCost || 0);
+    usValueUSD += valUSD; 
+    usCostUSD += costUSD; 
+    const valTWD = valUSD * fx;
     if(h.category === 'bond') bondTWD += valTWD; else equityTWD += valTWD;
   });
 
@@ -354,8 +335,9 @@ function renderTable(bodyId, holdings, currencySymbol, market){
     return;
   }
   holdings.forEach((h)=>{
-    const cost = h.qty * (h.avgCost || 0);
-    const pnl = h.value - cost;
+    const value = (h.qty || 0) * (h.price || 0);
+    const cost = (h.qty || 0) * (h.avgCost || 0);
+    const pnl = value - cost;
     const pnlPct = cost ? (pnl / cost * 100) : 0;
     const pnlClass = pnl >= 0 ? 'delta-up' : 'delta-down';
     const tagClass = h.category === 'bond' ? 'tag-bond' : 'tag-equity';
@@ -366,10 +348,10 @@ function renderTable(bodyId, holdings, currencySymbol, market){
     tr.setAttribute('data-tr-id', h.id);
     tr.innerHTML = `
       <td><span class="name">${h.name}</span><span class="tag ${tagClass}">${tagLabel}</span>${codeLine?`<span class="code">${codeLine}</span>`:''}</td>
-      <td style="text-align:right;"><input class="qty-input" type="text" inputmode="decimal" value="${h.qty}" data-market="${market}" data-id="${h.id}" autocomplete="one-time-code" aria-autocomplete="none" spellcheck="false"></td>
-      <td style="text-align:right;"><input class="avgcost-input" type="text" inputmode="decimal" value="${h.avgCost || 0}" data-market="${market}" data-id="${h.id}" autocomplete="one-time-code" aria-autocomplete="none" spellcheck="false"></td>
-      <td style="text-align:right;"><input class="price-input" type="text" inputmode="decimal" value="${h.price}" data-market="${market}" data-id="${h.id}" autocomplete="one-time-code" aria-autocomplete="none" spellcheck="false"></td>
-      <td style="text-align:right;" class="val-cell">${currencySymbol}${fmt(h.value)}</td>
+      <td style="text-align:right;"><input class="qty-input" type="text" inputmode="decimal" value="${h.qty}" data-market="${market}" data-id="${h.id}" data-field="qty" autocomplete="off"></td>
+      <td style="text-align:right;"><input class="avgcost-input" type="text" inputmode="decimal" value="${h.avgCost || 0}" data-market="${market}" data-id="${h.id}" data-field="avgCost" autocomplete="off"></td>
+      <td style="text-align:right;"><input class="price-input" type="text" inputmode="decimal" value="${h.price}" data-market="${market}" data-id="${h.id}" data-field="price" autocomplete="off"></td>
+      <td style="text-align:right;" class="val-cell">${currencySymbol}${fmt(value)}</td>
       <td style="text-align:right;" class="pnl-cell ${pnlClass}">${pnl>=0?'+':''}${fmt(pnl)} (${pnlPct.toFixed(1)}%)</td>
       <td style="text-align:right;"><button class="remove-btn" type="button" data-market="${market}" data-id="${h.id}">✕</button></td>
     `;
@@ -377,29 +359,33 @@ function renderTable(bodyId, holdings, currencySymbol, market){
   });
 }
 
-function updateCalculatedDisplays(){
-  const totals = computeTotals();
+function updateSingleRowAndHeader(market, id){
+  const h = state[market].find(item => item.id === id);
+  if(!h) return;
 
-  ['tw', 'us'].forEach(market => {
-    const symbol = market === 'tw' ? 'NT$' : '$';
-    state[market].forEach(h => {
-      const tr = document.querySelector(`tr[data-tr-id="${h.id}"]`);
-      if(tr){
-        const cost = h.qty * (h.avgCost || 0);
-        const pnl = h.value - cost;
-        const pnlPct = cost ? (pnl / cost * 100) : 0;
-        const pnlClass = pnl >= 0 ? 'delta-up' : 'delta-down';
-        
-        const valCell = tr.querySelector('.val-cell');
-        const pnlCell = tr.querySelector('.pnl-cell');
-        if(valCell) valCell.textContent = `${symbol}${fmt(h.value)}`;
-        if(pnlCell){
-          pnlCell.textContent = `${pnl>=0?'+':''}${fmt(pnl)} (${pnlPct.toFixed(1)}%)`;
-          pnlCell.className = `pnl-cell ${pnlClass}`;
-        }
-      }
-    });
-  });
+  const symbol = market === 'tw' ? 'NT$' : '$';
+  const tr = document.querySelector(`tr[data-tr-id="${id}"]`);
+  if(tr){
+    const value = (h.qty || 0) * (h.price || 0);
+    const cost = (h.qty || 0) * (h.avgCost || 0);
+    const pnl = value - cost;
+    const pnlPct = cost ? (pnl / cost * 100) : 0;
+    const pnlClass = pnl >= 0 ? 'delta-up' : 'delta-down';
+    
+    const valCell = tr.querySelector('.val-cell');
+    const pnlCell = tr.querySelector('.pnl-cell');
+    if(valCell) valCell.textContent = `${symbol}${fmt(value)}`;
+    if(pnlCell){
+      pnlCell.textContent = `${pnl>=0?'+':''}${fmt(pnl)} (${pnlPct.toFixed(1)}%)`;
+      pnlCell.className = `pnl-cell ${pnlClass}`;
+    }
+  }
+
+  updateGlobalDisplaysOnly();
+}
+
+function updateGlobalDisplaysOnly(){
+  const totals = computeTotals();
 
   document.getElementById('heroTotal').textContent = 'NT$ ' + fmt(totals.totalValue);
   const pnl = totals.totalValue - totals.totalCost;
@@ -431,7 +417,7 @@ function updateCalculatedDisplays(){
 function fullRender(){
   renderTable('twBody', state.tw, 'NT$', 'tw');
   renderTable('usBody', state.us, '$', 'us');
-  updateCalculatedDisplays();
+  updateGlobalDisplaysOnly();
   renderHistory();
 }
 
@@ -450,8 +436,7 @@ function renderHistory(){
   `).join('');
 }
 
-function saveState(){ 
-  syncInputsToState();
+function saveStateToStorage(){ 
   localStorage.setItem('asset_state', JSON.stringify(state)); 
   localStorage.setItem('asset_history', JSON.stringify(history)); 
 }
@@ -467,17 +452,23 @@ function loadState(){
 
 document.addEventListener('input', (e)=>{
   const target = e.target;
-  if(target.classList.contains('price-input') || target.classList.contains('qty-input') || target.classList.contains('avgcost-input')){
-    syncInputsToState();
-    updateCalculatedDisplays();
+  const market = target.dataset.market;
+  const id = target.dataset.id;
+  const field = target.dataset.field;
+
+  if(market && id && field){
+    const item = state[market].find(x => x.id === id);
+    if(item){
+      item[field] = parseFloat(target.value) || 0;
+      updateSingleRowAndHeader(market, id);
+    }
   } else if(target.id === 'fxRate'){
-    syncInputsToState();
-    updateCalculatedDisplays();
+    state.fx = parseFloat(target.value) || 31.5;
+    updateGlobalDisplaysOnly();
   }
 });
 
 document.getElementById('refreshBtn').addEventListener('click', async ()=>{
-  syncInputsToState();
   const statusEl = document.getElementById('refreshStatus');
   statusEl.textContent = '⏳ 正在線上更新最新股價中...';
   
@@ -507,7 +498,7 @@ document.getElementById('refreshBtn').addEventListener('click', async ()=>{
       }catch(e){}
     }
 
-    saveState();
+    saveStateToStorage();
     fullRender();
     statusEl.textContent = '✅ 最新股價已成功更新！';
   } catch(e) {
@@ -517,7 +508,6 @@ document.getElementById('refreshBtn').addEventListener('click', async ()=>{
 });
 
 document.getElementById('twAddBtn').addEventListener('click', ()=>{
-  syncInputsToState();
   const code = document.getElementById('twAddCode').value.trim();
   const name = document.getElementById('twAddName').value.trim() || code;
   const qty = parseFloat(document.getElementById('twAddQty').value) || 0;
@@ -527,12 +517,11 @@ document.getElementById('twAddBtn').addEventListener('click', ()=>{
   if(!code || !qty){ alert('請填寫代號與股數'); return; }
 
   state.tw.push({ id:uid('tw'), name, code, qty, avgCost, price, category });
-  saveState(); fullRender();
+  saveStateToStorage(); fullRender();
   ['twAddCode','twAddName','twAddQty','twAddAvgCost','twAddPrice'].forEach(id=>document.getElementById(id).value='');
 });
 
 document.getElementById('usAddBtn').addEventListener('click', ()=>{
-  syncInputsToState();
   const code = document.getElementById('usAddCode').value.trim().toUpperCase();
   const qty = parseFloat(document.getElementById('usAddQty').value) || 0;
   const avgCost = parseFloat(document.getElementById('usAddAvgCost').value) || 0;
@@ -541,7 +530,7 @@ document.getElementById('usAddBtn').addEventListener('click', ()=>{
   if(!code || !qty){ alert('請填寫 Ticker 與股數'); return; }
 
   state.us.push({ id:uid('us'), name:code, code, qty, avgCost, price, category });
-  saveState(); fullRender();
+  saveStateToStorage(); fullRender();
   ['usAddCode','usAddQty','usAddAvgCost','usAddPrice'].forEach(id=>document.getElementById(id).value='');
 });
 
@@ -550,26 +539,25 @@ document.addEventListener('click', (e)=>{
     const market = e.target.dataset.market;
     const id = e.target.dataset.id;
     if(confirm('確定要移除這筆持倉嗎？')){
-      syncInputsToState();
       state[market] = state[market].filter(h=>h.id!==id);
-      saveState(); fullRender();
+      saveStateToStorage(); fullRender();
     }
   }
 });
 
 document.getElementById('snapshotBtn').addEventListener('click', ()=>{
-  saveState();
+  saveStateToStorage();
   const totals = computeTotals();
   const now = new Date();
   const dateStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
   history.push({ date: dateStr, totalValue: totals.totalValue });
-  saveState();
+  saveStateToStorage();
   fullRender();
   alert('已成功新增本週快照記錄！');
 });
 
 document.getElementById('updateAndSaveAllBtn').addEventListener('click', ()=>{
-  saveState();
+  saveStateToStorage();
   fullRender();
   const msg = document.getElementById('saveMsg');
   msg.style.opacity = 1;
