@@ -156,7 +156,7 @@
 <div class="wrap">
 
   <h1>資產配置與走勢</h1>
-  <p class="subtitle">台股 + 美股持倉整合檢視 · 輸入資料保存修正版</p>
+  <p class="subtitle">台股 + 美股持倉整合檢視 · 自動填入隔離修正版</p>
 
   <div class="hero">
     <div class="hero-label">總資產淨值（換算新台幣）</div>
@@ -169,7 +169,6 @@
   </div>
 
   <div class="grid2">
-    <!-- 資產配置圖 -->
     <div class="card" style="margin-bottom:0;">
       <div class="card-title">資產配置 — 股票 vs 債券</div>
       <div id="allocText" style="font-size:20px;font-weight:600;margin-top:10px;color:var(--text);">股票 —% · 債券 —%</div>
@@ -183,7 +182,6 @@
       </div>
     </div>
 
-    <!-- 資產摘要 -->
     <div class="card" style="margin-bottom:0;">
       <div class="card-title">資產比例明細</div>
       <div class="card-sub" id="equityValText">股票總額：NT$ —</div>
@@ -196,13 +194,12 @@
     
     <div class="fx-row">
       美元兌台幣匯率
-      <input type="number" id="fxRate" value="31.5" step="0.01">
+      <input type="number" id="fxRate" value="31.5" step="0.01" autocomplete="off" data-lpignore="true">
       <span style="color:var(--text-dim);font-size:12px;">（用於將美股帳戶換算為台幣）</span>
     </div>
 
-    <!-- 更新股價按鈕 -->
     <div class="btnrow" style="margin-top:0;margin-bottom:18px;">
-      <button class="btn-primary" id="refreshBtn">🔄 線上聯網更新最新股價</button>
+      <button class="btn-primary" id="refreshBtn" type="button">🔄 線上聯網更新最新股價</button>
       <span class="save-msg" id="refreshStatus" style="color:var(--text-dim);">點擊上方按鈕可線上抓取台美股最新市價</span>
     </div>
 
@@ -222,15 +219,15 @@
       <tbody id="twBody"></tbody>
     </table>
     <div class="add-row">
-      <label>代號<input type="text" id="twAddCode" placeholder="0050"></label>
-      <label>名稱<input type="text" id="twAddName" placeholder="元大台灣50"></label>
-      <label>股數<input type="number" id="twAddQty" step="any" placeholder="1000"></label>
-      <label>平均成本<input type="number" id="twAddAvgCost" step="any" placeholder="平均成本"></label>
-      <label>現價<input type="number" id="twAddPrice" step="any" placeholder="現價"></label>
+      <label>代號<input type="text" id="twAddCode" placeholder="0050" autocomplete="off"></label>
+      <label>名稱<input type="text" id="twAddName" placeholder="元大台灣50" autocomplete="off"></label>
+      <label>股數<input type="number" id="twAddQty" step="any" placeholder="1000" autocomplete="off"></label>
+      <label>平均成本<input type="number" id="twAddAvgCost" step="any" placeholder="平均成本" autocomplete="off"></label>
+      <label>現價<input type="number" id="twAddPrice" step="any" placeholder="現價" autocomplete="off"></label>
       <label>類別
         <select id="twAddCategory"><option value="equity">股票</option><option value="bond">債券</option></select>
       </label>
-      <button class="btn-ghost btn-small" id="twAddBtn" style="align-self:flex-end;">＋ 新增台股</button>
+      <button class="btn-ghost btn-small" id="twAddBtn" type="button" style="align-self:flex-end;">＋ 新增台股</button>
     </div>
 
     <div class="section-heading" style="margin-top:26px;"><span>美股帳戶（美元）</span></div>
@@ -249,25 +246,24 @@
       <tbody id="usBody"></tbody>
     </table>
     <div class="add-row">
-      <label>代號 Ticker<input type="text" id="usAddCode" placeholder="AAPL"></label>
-      <label>股數<input type="number" id="usAddQty" step="any" placeholder="10"></label>
-      <label>平均成本<input type="number" id="usAddAvgCost" step="any" placeholder="平均成本"></label>
-      <label>現價<input type="number" id="usAddPrice" step="any" placeholder="現價"></label>
+      <label>代號 Ticker<input type="text" id="usAddCode" placeholder="AAPL" autocomplete="off"></label>
+      <label>股數<input type="number" id="usAddQty" step="any" placeholder="10" autocomplete="off"></label>
+      <label>平均成本<input type="number" id="usAddAvgCost" step="any" placeholder="平均成本" autocomplete="off"></label>
+      <label>現價<input type="number" id="usAddPrice" step="any" placeholder="現價" autocomplete="off"></label>
       <label>類別
         <select id="usAddCategory"><option value="equity">股票</option><option value="bond">債券</option></select>
       </label>
-      <button class="btn-ghost btn-small" id="usAddBtn" style="align-self:flex-end;">＋ 新增美股</button>
+      <button class="btn-ghost btn-small" id="usAddBtn" type="button" style="align-self:flex-end;">＋ 新增美股</button>
     </div>
 
     <div class="btnrow">
-      <button class="btn-primary" id="updateAndSaveAllBtn">💾 儲存所有修改</button>
-      <button class="btn-ghost" id="snapshotBtn">手動記錄本週快照</button>
-      <button class="btn-ghost" id="resetBtn">還原預設資料</button>
+      <button class="btn-primary" id="updateAndSaveAllBtn" type="button">💾 儲存所有修改</button>
+      <button class="btn-ghost" id="snapshotBtn" type="button">手動記錄本週快照</button>
+      <button class="btn-ghost" id="resetBtn" type="button">還原預設資料</button>
       <span class="save-msg" id="saveMsg" style="opacity:0;transition:opacity .3s;">已成功儲存修改！</span>
     </div>
   </div>
 
-  <!-- 週快照紀錄 -->
   <div class="card">
     <div class="card-title">週快照歷史紀錄</div>
     <div class="history-list" id="historyList">
@@ -305,7 +301,6 @@ const INITIAL_STATE = {
 let state = JSON.parse(JSON.stringify(INITIAL_STATE));
 let history = [];
 
-// 強制將目前所有 Input 內的文字讀回 state 中
 function syncInputsToState(){
   ['tw', 'us'].forEach(market => {
     state[market].forEach(h => {
@@ -315,9 +310,9 @@ function syncInputsToState(){
         const cEl = tr.querySelector('.avgcost-input');
         const pEl = tr.querySelector('.price-input');
         
-        if(qEl) h.qty = parseFloat(qEl.value) || 0;
-        if(cEl) h.avgCost = parseFloat(cEl.value) || 0;
-        if(pEl) h.price = parseFloat(pEl.value) || 0;
+        if(qEl && qEl.value !== '') h.qty = parseFloat(qEl.value) || 0;
+        if(cEl && cEl.value !== '') h.avgCost = parseFloat(cEl.value) || 0;
+        if(pEl && pEl.value !== '') h.price = parseFloat(pEl.value) || 0;
       }
     });
   });
@@ -372,12 +367,12 @@ function renderTable(bodyId, holdings, currencySymbol, market){
     tr.setAttribute('data-tr-id', h.id);
     tr.innerHTML = `
       <td><span class="name">${h.name}</span><span class="tag ${tagClass}">${tagLabel}</span>${codeLine?`<span class="code">${codeLine}</span>`:''}</td>
-      <td style="text-align:right;"><input class="qty-input" type="number" step="any" min="0" value="${h.qty}" data-market="${market}" data-id="${h.id}"></td>
-      <td style="text-align:right;"><input class="avgcost-input" type="number" step="any" min="0" value="${h.avgCost || 0}" data-market="${market}" data-id="${h.id}"></td>
-      <td style="text-align:right;"><input class="price-input" type="number" step="any" value="${h.price}" data-market="${market}" data-id="${h.id}"></td>
+      <td style="text-align:right;"><input class="qty-input" type="number" step="any" min="0" value="${h.qty}" data-market="${market}" data-id="${h.id}" name="qty_${h.id}" autocomplete="new-password" data-lpignore="true"></td>
+      <td style="text-align:right;"><input class="avgcost-input" type="number" step="any" min="0" value="${h.avgCost || 0}" data-market="${market}" data-id="${h.id}" name="cost_${h.id}" autocomplete="new-password" data-lpignore="true"></td>
+      <td style="text-align:right;"><input class="price-input" type="number" step="any" value="${h.price}" data-market="${market}" data-id="${h.id}" name="price_${h.id}" autocomplete="new-password" data-lpignore="true"></td>
       <td style="text-align:right;" class="val-cell">${currencySymbol}${fmt(h.value)}</td>
       <td style="text-align:right;" class="pnl-cell ${pnlClass}">${pnl>=0?'+':''}${fmt(pnl)} (${pnlPct.toFixed(1)}%)</td>
-      <td style="text-align:right;"><button class="remove-btn" data-market="${market}" data-id="${h.id}">✕</button></td>
+      <td style="text-align:right;"><button class="remove-btn" type="button" data-market="${market}" data-id="${h.id}">✕</button></td>
     `;
     body.appendChild(tr);
   });
@@ -386,7 +381,6 @@ function renderTable(bodyId, holdings, currencySymbol, market){
 function updateCalculatedDisplays(){
   const totals = computeTotals();
 
-  // 更新單列市值與損益（不用重構 DOM，直接替換數字文字）
   ['tw', 'us'].forEach(market => {
     const symbol = market === 'tw' ? 'NT$' : '$';
     state[market].forEach(h => {
@@ -408,7 +402,6 @@ function updateCalculatedDisplays(){
     });
   });
 
-  // 更新頂部英雄區資訊
   document.getElementById('heroTotal').textContent = 'NT$ ' + fmt(totals.totalValue);
   const pnl = totals.totalValue - totals.totalCost;
   const pnlEl = document.getElementById('totalPnl');
@@ -425,7 +418,6 @@ function updateCalculatedDisplays(){
     deltaEl.textContent = '無快照';
   }
 
-  // 更新資產配置條與明細
   const eqPct = totals.totalValue ? (totals.equityTWD / totals.totalValue * 100) : 0;
   const bdPct = totals.totalValue ? (totals.bondTWD / totals.totalValue * 100) : 0;
   
@@ -474,7 +466,6 @@ function loadState(){
   }catch(e){}
 }
 
-// 監聽表格內的輸入變更，打字時立刻試算
 document.addEventListener('input', (e)=>{
   const target = e.target;
   if(target.classList.contains('price-input') || target.classList.contains('qty-input') || target.classList.contains('avgcost-input')){
@@ -486,7 +477,6 @@ document.addEventListener('input', (e)=>{
   }
 });
 
-// 線上更新股價
 document.getElementById('refreshBtn').addEventListener('click', async ()=>{
   syncInputsToState();
   const statusEl = document.getElementById('refreshStatus');
@@ -527,7 +517,6 @@ document.getElementById('refreshBtn').addEventListener('click', async ()=>{
   setTimeout(()=> statusEl.textContent = '點擊上方按鈕可線上抓取台美股最新市價', 3000);
 });
 
-// 新增台股
 document.getElementById('twAddBtn').addEventListener('click', ()=>{
   syncInputsToState();
   const code = document.getElementById('twAddCode').value.trim();
@@ -543,7 +532,6 @@ document.getElementById('twAddBtn').addEventListener('click', ()=>{
   ['twAddCode','twAddName','twAddQty','twAddAvgCost','twAddPrice'].forEach(id=>document.getElementById(id).value='');
 });
 
-// 新增美股
 document.getElementById('usAddBtn').addEventListener('click', ()=>{
   syncInputsToState();
   const code = document.getElementById('usAddCode').value.trim().toUpperCase();
@@ -558,7 +546,6 @@ document.getElementById('usAddBtn').addEventListener('click', ()=>{
   ['usAddCode','usAddQty','usAddAvgCost','usAddPrice'].forEach(id=>document.getElementById(id).value='');
 });
 
-// 刪除持倉
 document.addEventListener('click', (e)=>{
   if(e.target.classList.contains('remove-btn')){
     const market = e.target.dataset.market;
@@ -571,7 +558,6 @@ document.addEventListener('click', (e)=>{
   }
 });
 
-// 手動記錄快照
 document.getElementById('snapshotBtn').addEventListener('click', ()=>{
   saveState();
   const totals = computeTotals();
@@ -583,7 +569,6 @@ document.getElementById('snapshotBtn').addEventListener('click', ()=>{
   alert('已成功新增本週快照記錄！');
 });
 
-// 💾 儲存所有修改按鈕
 document.getElementById('updateAndSaveAllBtn').addEventListener('click', ()=>{
   saveState();
   fullRender();
@@ -592,7 +577,6 @@ document.getElementById('updateAndSaveAllBtn').addEventListener('click', ()=>{
   setTimeout(()=>msg.style.opacity = 0, 2000);
 });
 
-// 還原預設資料
 document.getElementById('resetBtn').addEventListener('click', ()=>{
   if(confirm('確定要還原成預設資料嗎？')){
     state = JSON.parse(JSON.stringify(INITIAL_STATE));
