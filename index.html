@@ -156,7 +156,7 @@
 <div class="wrap">
 
   <h1>資產配置與走勢</h1>
-  <p class="subtitle">台股 + 美股持倉整合檢視 · 支援線上更新最新股價</p>
+  <p class="subtitle">台股 + 美股持倉整合檢視 · 即時計算與輸入修復版</p>
 
   <div class="hero">
     <div class="hero-label">總資產淨值（換算新台幣）</div>
@@ -260,7 +260,7 @@
     </div>
 
     <div class="btnrow">
-      <button class="btn-primary" id="updateAndSaveAllBtn">💾 儲存所有修改並更新計算</button>
+      <button class="btn-primary" id="updateAndSaveAllBtn">💾 儲存所有修改</button>
       <button class="btn-ghost" id="snapshotBtn">手動記錄本週快照</button>
       <button class="btn-ghost" id="resetBtn">還原預設資料</button>
       <span class="save-msg" id="saveMsg" style="opacity:0;transition:opacity .3s;">已成功儲存修改！</span>
@@ -349,17 +349,79 @@ function renderTable(bodyId, holdings, currencySymbol, market){
     const codeLine = h.note ? h.note : h.code;
     
     const tr = document.createElement('tr');
+    tr.setAttribute('data-tr-id', h.id);
     tr.innerHTML = `
       <td><span class="name">${h.name}</span><span class="tag ${tagClass}">${tagLabel}</span>${codeLine?`<span class="code">${codeLine}</span>`:''}</td>
       <td style="text-align:right;"><input class="qty-input" type="number" step="any" min="0" value="${h.qty}" data-market="${market}" data-id="${h.id}"></td>
       <td style="text-align:right;"><input class="avgcost-input" type="number" step="any" min="0" value="${h.avgCost || 0}" data-market="${market}" data-id="${h.id}"></td>
       <td style="text-align:right;"><input class="price-input" type="number" step="any" value="${h.price}" data-market="${market}" data-id="${h.id}"></td>
-      <td style="text-align:right;">${currencySymbol}${fmt(h.value)}</td>
-      <td style="text-align:right;" class="${pnlClass}">${pnl>=0?'+':''}${fmt(pnl)} (${pnlPct.toFixed(1)}%)</td>
+      <td style="text-align:right;" class="val-cell">${currencySymbol}${fmt(h.value)}</td>
+      <td style="text-align:right;" class="pnl-cell ${pnlClass}">${pnl>=0?'+':''}${fmt(pnl)} (${pnlPct.toFixed(1)}%)</td>
       <td style="text-align:right;"><button class="remove-btn" data-market="${market}" data-id="${h.id}">✕</button></td>
     `;
     body.appendChild(tr);
   });
+}
+
+function updateCalculatedDisplays(){
+  const totals = computeTotals();
+
+  // 更新單列市值與損益（不重繪 input）
+  ['tw', 'us'].forEach(market => {
+    const symbol = market === 'tw' ? 'NT$' : '$';
+    state[market].forEach(h => {
+      const tr = document.querySelector(`tr[data-tr-id="${h.id}"]`);
+      if(tr){
+        const cost = h.qty * (h.avgCost || 0);
+        const pnl = h.value - cost;
+        const pnlPct = cost ? (pnl / cost * 100) : 0;
+        const pnlClass = pnl >= 0 ? 'delta-up' : 'delta-down';
+        
+        const valCell = tr.querySelector('.val-cell');
+        const pnlCell = tr.querySelector('.pnl-cell');
+        if(valCell) valCell.textContent = `${symbol}${fmt(h.value)}`;
+        if(pnlCell){
+          pnlCell.textContent = `${pnl>=0?'+':''}${fmt(pnl)} (${pnlPct.toFixed(1)}%)`;
+          pnlCell.className = `pnl-cell ${pnlClass}`;
+        }
+      }
+    });
+  });
+
+  // 更新頂部英雄區
+  document.getElementById('heroTotal').textContent = 'NT$ ' + fmt(totals.totalValue);
+  const pnl = totals.totalValue - totals.totalCost;
+  const pnlEl = document.getElementById('totalPnl');
+  pnlEl.textContent = (pnl>=0?'+':'') + 'NT$' + fmt(pnl);
+  pnlEl.className = pnl>=0 ? 'delta-up':'delta-down';
+
+  const lastSnapshot = history.length ? history[history.length-1] : null;
+  const deltaEl = document.getElementById('deltaSinceLast');
+  if(lastSnapshot){
+    const d = totals.totalValue - lastSnapshot.totalValue;
+    deltaEl.textContent = (d>=0?'+':'') + 'NT$' + fmt(d);
+    deltaEl.className = d>=0 ? 'delta-up':'delta-down';
+  } else {
+    deltaEl.textContent = '無快照';
+  }
+
+  // 更新資產配置條
+  const eqPct = totals.totalValue ? (totals.equityTWD / totals.totalValue * 100) : 0;
+  const bdPct = totals.totalValue ? (totals.bondTWD / totals.totalValue * 100) : 0;
+  
+  document.getElementById('allocText').textContent = `股票 ${eqPct.toFixed(1)}% · 債券 ${bdPct.toFixed(1)}%`;
+  document.getElementById('equityBar').style.width = `${eqPct}%`;
+  document.getElementById('bondBar').style.width = `${bdPct}%`;
+  
+  document.getElementById('equityValText').textContent = `股票總額：NT$ ${fmt(totals.equityTWD)}`;
+  document.getElementById('bondValText').textContent = `債券總額：NT$ ${fmt(totals.bondTWD)}`;
+}
+
+function fullRender(){
+  renderTable('twBody', state.tw, 'NT$', 'tw');
+  renderTable('usBody', state.us, '$', 'us');
+  updateCalculatedDisplays();
+  renderHistory();
 }
 
 function renderHistory(){
@@ -377,59 +439,6 @@ function renderHistory(){
   `).join('');
 }
 
-function fullRender(){
-  const totals = computeTotals();
-  renderTable('twBody', state.tw, 'NT$', 'tw');
-  renderTable('usBody', state.us, '$', 'us');
-  document.getElementById('heroTotal').textContent = 'NT$ ' + fmt(totals.totalValue);
-  
-  const pnl = totals.totalValue - totals.totalCost;
-  const pnlEl = document.getElementById('totalPnl');
-  pnlEl.textContent = (pnl>=0?'+':'') + 'NT$' + fmt(pnl);
-  pnlEl.className = pnl>=0 ? 'delta-up':'delta-down';
-
-  const lastSnapshot = history.length ? history[history.length-1] : null;
-  const deltaEl = document.getElementById('deltaSinceLast');
-  if(lastSnapshot){
-    const d = totals.totalValue - lastSnapshot.totalValue;
-    deltaEl.textContent = (d>=0?'+':'') + 'NT$' + fmt(d);
-    deltaEl.className = d>=0 ? 'delta-up':'delta-down';
-  } else {
-    deltaEl.textContent = '無快照';
-  }
-
-  const eqPct = totals.totalValue ? (totals.equityTWD / totals.totalValue * 100) : 0;
-  const bdPct = totals.totalValue ? (totals.bondTWD / totals.totalValue * 100) : 0;
-  
-  document.getElementById('allocText').textContent = `股票 ${eqPct.toFixed(1)}% · 債券 ${bdPct.toFixed(1)}%`;
-  document.getElementById('equityBar').style.width = `${eqPct}%`;
-  document.getElementById('bondBar').style.width = `${bdPct}%`;
-  
-  document.getElementById('equityValText').textContent = `股票總額：NT$ ${fmt(totals.equityTWD)}`;
-  document.getElementById('bondValText').textContent = `債券總額：NT$ ${fmt(totals.bondTWD)}`;
-
-  renderHistory();
-}
-
-function syncInputsToState(){
-  document.querySelectorAll('input[data-id]').forEach(input => {
-    const market = input.dataset.market;
-    const id = input.dataset.id;
-    const h = state[market].find(x => x.id === id);
-    if (!h) return;
-    
-    const val = parseFloat(input.value);
-    const num = Number.isFinite(val) && val >= 0 ? val : 0;
-    
-    if (input.classList.contains('qty-input')) h.qty = num;
-    else if (input.classList.contains('avgcost-input')) h.avgCost = num;
-    else if (input.classList.contains('price-input')) h.price = num;
-  });
-  
-  const fxVal = parseFloat(document.getElementById('fxRate').value);
-  if(Number.isFinite(fxVal) && fxVal > 0) state.fx = fxVal;
-}
-
 function saveState(){ 
   localStorage.setItem('asset_state', JSON.stringify(state)); 
   localStorage.setItem('asset_history', JSON.stringify(history)); 
@@ -443,22 +452,39 @@ function loadState(){
   }catch(e){}
 }
 
-// 離焦時更新狀態
-document.addEventListener('change', (e)=>{
-  if(e.target.classList.contains('price-input') || e.target.classList.contains('qty-input') || e.target.classList.contains('avgcost-input') || e.target.id === 'fxRate'){
-    syncInputsToState();
-    saveState();
-    fullRender();
+// 全域即時監聽 input 輸入事件（核心修正：動態更新狀態與數值，不重構表格 DOM）
+document.addEventListener('input', (e)=>{
+  const target = e.target;
+  if(target.classList.contains('price-input') || target.classList.contains('qty-input') || target.classList.contains('avgcost-input')){
+    const market = target.dataset.market;
+    const id = target.dataset.id;
+    const h = state[market].find(x => x.id === id);
+    if(h){
+      const val = parseFloat(target.value);
+      const num = Number.isFinite(val) && val >= 0 ? val : 0;
+      if (target.classList.contains('qty-input')) h.qty = num;
+      else if (target.classList.contains('avgcost-input')) h.avgCost = num;
+      else if (target.classList.contains('price-input')) h.price = num;
+      
+      updateCalculatedDisplays();
+      saveState();
+    }
+  } else if(target.id === 'fxRate'){
+    const fxVal = parseFloat(target.value);
+    if(Number.isFinite(fxVal) && fxVal > 0){
+      state.fx = fxVal;
+      updateCalculatedDisplays();
+      saveState();
+    }
   }
 });
 
-// 線上抓取最新股價 API 模擬/調用
+// 線上更新股價
 document.getElementById('refreshBtn').addEventListener('click', async ()=>{
   const statusEl = document.getElementById('refreshStatus');
   statusEl.textContent = '⏳ 正在線上更新最新股價中...';
   
   try {
-    // 抓取美股即時價 (Yahoo Finance API 公開 Endpoint 範例)
     for(let h of state.us){
       if(!h.code) continue;
       try{
@@ -471,7 +497,6 @@ document.getElementById('refreshBtn').addEventListener('click', async ()=>{
       }catch(e){}
     }
 
-    // 抓取台股即時價
     for(let h of state.tw){
       if(!h.code) continue;
       try{
@@ -494,9 +519,8 @@ document.getElementById('refreshBtn').addEventListener('click', async ()=>{
   setTimeout(()=> statusEl.textContent = '點擊上方按鈕可線上抓取台美股最新市價', 3000);
 });
 
-// 新增持倉
+// 新增台股
 document.getElementById('twAddBtn').addEventListener('click', ()=>{
-  syncInputsToState();
   const code = document.getElementById('twAddCode').value.trim();
   const name = document.getElementById('twAddName').value.trim() || code;
   const qty = parseFloat(document.getElementById('twAddQty').value) || 0;
@@ -510,8 +534,8 @@ document.getElementById('twAddBtn').addEventListener('click', ()=>{
   ['twAddCode','twAddName','twAddQty','twAddAvgCost','twAddPrice'].forEach(id=>document.getElementById(id).value='');
 });
 
+// 新增美股
 document.getElementById('usAddBtn').addEventListener('click', ()=>{
-  syncInputsToState();
   const code = document.getElementById('usAddCode').value.trim().toUpperCase();
   const qty = parseFloat(document.getElementById('usAddQty').value) || 0;
   const avgCost = parseFloat(document.getElementById('usAddAvgCost').value) || 0;
@@ -527,7 +551,6 @@ document.getElementById('usAddBtn').addEventListener('click', ()=>{
 // 刪除持倉
 document.addEventListener('click', (e)=>{
   if(e.target.classList.contains('remove-btn')){
-    syncInputsToState();
     const market = e.target.dataset.market;
     const id = e.target.dataset.id;
     if(confirm('確定要移除這筆持倉嗎？')){
@@ -539,7 +562,6 @@ document.addEventListener('click', (e)=>{
 
 // 手動記錄快照
 document.getElementById('snapshotBtn').addEventListener('click', ()=>{
-  syncInputsToState();
   const totals = computeTotals();
   const now = new Date();
   const dateStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
@@ -549,9 +571,8 @@ document.getElementById('snapshotBtn').addEventListener('click', ()=>{
   alert('已成功新增本週快照記錄！');
 });
 
-// 儲存修改
+// 儲存所有修改按鈕
 document.getElementById('updateAndSaveAllBtn').addEventListener('click', ()=>{
-  syncInputsToState();
   saveState();
   fullRender();
   const msg = document.getElementById('saveMsg');
@@ -559,7 +580,7 @@ document.getElementById('updateAndSaveAllBtn').addEventListener('click', ()=>{
   setTimeout(()=>msg.style.opacity = 0, 2000);
 });
 
-// 還原
+// 還原預設
 document.getElementById('resetBtn').addEventListener('click', ()=>{
   if(confirm('確定要還原成預設資料嗎？')){
     state = JSON.parse(JSON.stringify(INITIAL_STATE));
