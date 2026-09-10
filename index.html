@@ -730,84 +730,173 @@ document.addEventListener('input', (e)=>{
 
 document.getElementById('updateAndSaveAllBtn').addEventListener('click', saveToCloud);
 
+// ===== 報價抓取：多來源 fallback =====
+// 瀏覽器直接呼叫 TWSE/Yahoo 很容易遇到 CORS、403、限流或來源暫時不可用。
+// 這裡改成「多來源依序嘗試」，任何一個來源失敗就換下一個。
+const PRICE_PROXIES = [
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+];
+
+async function fetchJsonWithFallback(urls){
+  let lastErr = null;
+  for(const makeUrl of urls){
+    try{
+      const requestUrl = typeof makeUrl === 'function' ? makeUrl() : makeUrl;
+      const res = await fetch(requestUrl, {cache:'no-store'});
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    }catch(e){
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('all sources failed');
+}
+
+function normalizeTwCode(code){
+  return String(code || '').trim().toUpperCase().replace(/^TWSE:/,'').replace(/^TPEX:/,'');
+}
+
 async function fetchTwLive(){
-  const codes = state.tw.map(h=>h.code).filter(Boolean);
-  if(!codes.length) return 0;
-  const query = codes.map(c=>`tse_${c}.tw`).concat(codes.map(c=>`otc_${c}.tw`)).join('|');
-  const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(query)}&json=1&delay=0`;
-  const res = await fetch(url);
-  if(!res.ok) throw new Error('TWSE 回應錯誤 ' + res.status);
-  const data = await res.json();
+  const holdings = state.tw.filter(h => h.code && /^\\d{4,6}$/.test(normalizeTwCode(h.code)));
+  if(!holdings.length) return 0;
+
+  const codes = holdings.map(h => normalizeTwCode(h.code));
+  const query = codes.map(c=>`tse_${c}.tw`)
+    .concat(codes.map(c=>`otc_${c}.tw`)).join('|');
+
+  const target = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(query)}&json=1&delay=0`;
+
+  // 先直接打 TWSE；若瀏覽器被 CORS 擋，再走 proxy。
+  const urls = [
+    () => target,
+    ...PRICE_PROXIES.map(p => () => p(target))
+  ];
+
+  const data = await fetchJsonWithFallback(urls);
   const list = data.msgArray || [];
   const priceByCode = {};
+
   list.forEach(item=>{
+    const code = normalizeTwCode(item.c);
+    // z = 最新成交價；盤中無成交時 fallback 到 y = 昨收
     const raw = (item.z && item.z !== '-') ? item.z : item.y;
-    const price = raw ? parseFloat(raw) : null;
-    if(price && !isNaN(price) && !(item.c in priceByCode)) priceByCode[item.c] = price;
+    const price = raw ? parseFloat(String(raw).replace(/,/g,'')) : null;
+    if(code && Number.isFinite(price) && price > 0) priceByCode[code] = price;
   });
+
   let updated = 0;
   state.tw.forEach(h=>{
-    if(h.code && priceByCode[h.code] != null){ h.price = priceByCode[h.code]; updated++; }
+    const code = normalizeTwCode(h.code);
+    if(code && priceByCode[code] != null){
+      h.price = priceByCode[code];
+      updated++;
+    }
   });
   return updated;
 }
 
-// Several free CORS proxies chained as fallbacks — if one is down or rate-limited,
-// the next is tried automatically. None of these are official/guaranteed services.
-const CORS_PROXIES = [
-  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-];
+function yahooSymbolsFor(code){
+  const s = String(code || '').trim().toUpperCase();
+  if(!s) return [];
+  // 台股若有人直接輸入 2330/2330.TW，也可從 Yahoo 取得。
+  if(/^\\d{4,6}$/.test(s)) return [`${s}.TW`, `${s}.TWO`];
+  return [s];
+}
 
 async function fetchYahooPrice(symbol){
-  const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
-  let lastErr;
-  for(const buildProxyUrl of CORS_PROXIES){
+  const symbols = yahooSymbolsFor(symbol);
+  let lastErr = null;
+
+  for(const sym of symbols){
+    const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=1d`;
+    const urls = [
+      () => targetUrl,
+      ...PRICE_PROXIES.map(p => () => p(targetUrl))
+    ];
+
     try{
-      const res = await fetch(buildProxyUrl(targetUrl));
-      if(!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-      if(typeof price === 'number') return price;
-      throw new Error('no price in response');
-    }catch(e){ lastErr = e; }
+      const data = await fetchJsonWithFallback(urls);
+      const result = data?.chart?.result?.[0];
+      const price = result?.meta?.regularMarketPrice ??
+                    result?.indicators?.quote?.[0]?.close?.slice(-1)[0];
+      if(typeof price === 'number' && Number.isFinite(price) && price > 0) return price;
+      throw new Error('Yahoo response has no valid price');
+    }catch(e){
+      lastErr = e;
+    }
   }
-  throw lastErr || new Error('all proxies failed');
+  throw lastErr || new Error('all Yahoo symbols failed');
+}
+
+// 美股抓取改成一次一檔，但保留原本的代號設定方式。
+async function fetchUsLive(){
+  let updated = 0;
+  const failed = [];
+
+  for(const h of state.us){
+    if(!h.code) continue;
+    try{
+      const price = await fetchYahooPrice(h.code);
+      if(Number.isFinite(price) && price > 0){
+        h.price = price;
+        updated++;
+      }else{
+        failed.push(h.name || h.code);
+      }
+    }catch(e){
+      console.error(`Price fetch failed: ${h.code}`, e);
+      failed.push(h.name || h.code);
+    }
+  }
+  return {updated, failed};
 }
 
 document.getElementById('refreshBtn').addEventListener('click', async ()=>{
   const statusEl = document.getElementById('refreshStatus');
-  statusEl.textContent = '⏳ 正在連線更新最新股價中...';
+  const btn = document.getElementById('refreshBtn');
+
+  if(btn.disabled) return;
+  btn.disabled = true;
+  btn.style.opacity = '0.65';
+  statusEl.textContent = '⏳ 正在連線更新台股與美股最新股價...';
 
   let twOk = 0;
+  let twError = null;
   try{
     twOk = await fetchTwLive();
-  }catch(e){ console.error('TW price fetch failed', e); }
-
-  let usOk = 0;
-  const usFailed = [];
-  for(let h of state.us){
-    if(!h.code) continue;
-    try{
-      const price = await fetchYahooPrice(h.code);
-      if(price){ h.price = price; usOk++; }
-    }catch(e){ usFailed.push(h.name); }
+  }catch(e){
+    twError = e;
+    console.error('TW price fetch failed:', e);
   }
 
+  const usResult = await fetchUsLive();
+  const usOk = usResult.updated;
+  const usFailed = usResult.failed;
+
+  // 即使部分來源失敗，也先把成功抓到的價格存起來。
   await saveToCloud();
   fullRender();
 
   const twTotal = state.tw.filter(h=>h.code).length;
   const usTotal = state.us.filter(h=>h.code).length;
+
   if(twOk + usOk > 0){
-    statusEl.textContent = `✅ 台股 ${twOk}/${twTotal} 檔、美股 ${usOk}/${usTotal} 檔已更新` +
-      (usFailed.length ? `（美股失敗：${usFailed.join('、')}）` : '');
-  } else {
-    statusEl.textContent = '⚠️ 目前抓不到任何報價（來源可能暫時無法連線），請稍後再試或手動修改價格。';
+    let message = `✅ 台股 ${twOk}/${twTotal} 檔、美股 ${usOk}/${usTotal} 檔已更新`;
+    if(twError) message += '（台股主要來源失敗，已嘗試備援來源）';
+    if(usFailed.length) message += `（美股失敗：${usFailed.join('、')}）`;
+    statusEl.textContent = message;
+  }else{
+    statusEl.textContent =
+      '⚠️ 所有報價來源目前都無法連線。請確認網路／稍後再試；原本價格不會被清除。';
   }
 
-  setTimeout(()=> statusEl.textContent = '點擊上方按鈕可線上抓取台美股最新市價', 6000);
+  btn.disabled = false;
+  btn.style.opacity = '';
+  setTimeout(()=> {
+    statusEl.textContent = '點擊上方按鈕可線上抓取台美股最新市價';
+  }, 8000);
 });
 
 document.getElementById('twAddBtn').addEventListener('click', ()=>{
