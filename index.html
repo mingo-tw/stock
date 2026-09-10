@@ -658,8 +658,10 @@ function syncInputsToStateInMemory(){
   state.fx = parseFloat(document.getElementById('fxRate').value) || 31.5;
 }
 
-async function saveToCloud(){
-  syncInputsToStateInMemory();
+async function saveToCloud(syncFromInputs = true){
+  // 一般按「儲存」時才從畫面 input 同步資料。
+  // 線上更新股價後不能再同步舊的 DOM 值，否則會把剛抓到的新價格覆蓋掉。
+  if(syncFromInputs) syncInputsToStateInMemory();
   const msg = document.getElementById('saveMsg');
   msg.textContent = '⏳ 上傳至雲端中...';
   msg.style.opacity = 1;
@@ -875,9 +877,10 @@ document.getElementById('refreshBtn').addEventListener('click', async ()=>{
   const usOk = usResult.updated;
   const usFailed = usResult.failed;
 
-  // 即使部分來源失敗，也先把成功抓到的價格存起來。
-  await saveToCloud();
+  // 先把成功抓到的新價格重新 render 到畫面，再儲存。
+  // 這裡明確禁止 syncFromInputs，避免舊 input 值把新股價覆蓋掉。
   fullRender();
+  await saveToCloud(false);
 
   const twTotal = state.tw.filter(h=>h.code).length;
   const usTotal = state.us.filter(h=>h.code).length;
@@ -896,7 +899,7 @@ document.getElementById('refreshBtn').addEventListener('click', async ()=>{
   btn.style.opacity = '';
   setTimeout(()=> {
     statusEl.textContent = '點擊上方按鈕可線上抓取台美股最新市價';
-  }, 8000);
+  }, 12000);
 });
 
 document.getElementById('twAddBtn').addEventListener('click', ()=>{
