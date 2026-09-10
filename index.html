@@ -730,56 +730,84 @@ document.addEventListener('input', (e)=>{
 
 document.getElementById('updateAndSaveAllBtn').addEventListener('click', saveToCloud);
 
+async function fetchTwLive(){
+  const codes = state.tw.map(h=>h.code).filter(Boolean);
+  if(!codes.length) return 0;
+  const query = codes.map(c=>`tse_${c}.tw`).concat(codes.map(c=>`otc_${c}.tw`)).join('|');
+  const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(query)}&json=1&delay=0`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('TWSE 回應錯誤 ' + res.status);
+  const data = await res.json();
+  const list = data.msgArray || [];
+  const priceByCode = {};
+  list.forEach(item=>{
+    const raw = (item.z && item.z !== '-') ? item.z : item.y;
+    const price = raw ? parseFloat(raw) : null;
+    if(price && !isNaN(price) && !(item.c in priceByCode)) priceByCode[item.c] = price;
+  });
+  let updated = 0;
+  state.tw.forEach(h=>{
+    if(h.code && priceByCode[h.code] != null){ h.price = priceByCode[h.code]; updated++; }
+  });
+  return updated;
+}
+
+// Several free CORS proxies chained as fallbacks — if one is down or rate-limited,
+// the next is tried automatically. None of these are official/guaranteed services.
+const CORS_PROXIES = [
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+];
+
 async function fetchYahooPrice(symbol){
   const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
-  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
-  
-  const res = await fetch(proxyUrl);
-  if(!res.ok) throw new Error('Network error');
-  const data = await res.json();
-  const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-  return price;
+  let lastErr;
+  for(const buildProxyUrl of CORS_PROXIES){
+    try{
+      const res = await fetch(buildProxyUrl(targetUrl));
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if(typeof price === 'number') return price;
+      throw new Error('no price in response');
+    }catch(e){ lastErr = e; }
+  }
+  throw lastErr || new Error('all proxies failed');
 }
 
 document.getElementById('refreshBtn').addEventListener('click', async ()=>{
   const statusEl = document.getElementById('refreshStatus');
-  statusEl.textContent = '⏳ 正在經由代理連線更新最新股價中...';
-  
-  let successCount = 0;
+  statusEl.textContent = '⏳ 正在連線更新最新股價中...';
 
+  let twOk = 0;
+  try{
+    twOk = await fetchTwLive();
+  }catch(e){ console.error('TW price fetch failed', e); }
+
+  let usOk = 0;
+  const usFailed = [];
   for(let h of state.us){
     if(!h.code) continue;
     try{
       const price = await fetchYahooPrice(h.code);
-      if(price){
-        h.price = price;
-        successCount++;
-      }
-    }catch(e){}
-  }
-
-  for(let h of state.tw){
-    if(!h.code) continue;
-    try{
-      const symbol = h.code.length === 4 || h.code.length === 6 ? `${h.code}.TW` : h.code;
-      const price = await fetchYahooPrice(symbol);
-      if(price){
-        h.price = price;
-        successCount++;
-      }
-    }catch(e){}
+      if(price){ h.price = price; usOk++; }
+    }catch(e){ usFailed.push(h.name); }
   }
 
   await saveToCloud();
   fullRender();
-  
-  if(successCount > 0){
-    statusEl.textContent = `✅ 已成功即時更新 ${successCount} 檔最新股價！`;
+
+  const twTotal = state.tw.filter(h=>h.code).length;
+  const usTotal = state.us.filter(h=>h.code).length;
+  if(twOk + usOk > 0){
+    statusEl.textContent = `✅ 台股 ${twOk}/${twTotal} 檔、美股 ${usOk}/${usTotal} 檔已更新` +
+      (usFailed.length ? `（美股失敗：${usFailed.join('、')}）` : '');
   } else {
-    statusEl.textContent = '⚠️ 網路連線受阻，請稍後再試或手動修改價格。';
+    statusEl.textContent = '⚠️ 目前抓不到任何報價（來源可能暫時無法連線），請稍後再試或手動修改價格。';
   }
-  
-  setTimeout(()=> statusEl.textContent = '點擊上方按鈕可線上抓取台美股最新市價', 4000);
+
+  setTimeout(()=> statusEl.textContent = '點擊上方按鈕可線上抓取台美股最新市價', 6000);
 });
 
 document.getElementById('twAddBtn').addEventListener('click', ()=>{
