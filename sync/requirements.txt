@@ -1,0 +1,3 @@
+requests>=2.31
+firstrade>=0.0.39
+shioaji>=1.2
