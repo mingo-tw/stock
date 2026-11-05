@@ -812,12 +812,24 @@ document.getElementById('updateAndSaveAllBtn').addEventListener('click', saveToC
 // ===== 報價抓取：多來源 fallback =====
 // 瀏覽器直接呼叫 TWSE/Yahoo 常遇到 CORS、403、限流。
 // 作法：每個來源都設逾時，失敗就換下一個；台股 TWSE 失敗再改用 Yahoo；美股 Yahoo 失敗再改用 Stooq。
+// 2026-11 起 corsproxy.io 需付費金鑰、thingproxy 已停用，只留兩個當最後備援
 const PRICE_PROXIES = [
   url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-  url => `https://thingproxy.freeboard.io/fetch/${url}`
+  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
 ];
+
+// ---- 主要來源：FinMind（台股、美股每日收盤價，網頁可直接讀取，不需轉接） ----
+async function fetchFinMindPrice(code, market){
+  const dataset = market === 'tw' ? 'TaiwanStockPrice' : 'USStockPrice';
+  const start = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10);
+  const url = `https://api.finmindtrade.com/api/v4/data?dataset=${dataset}&data_id=${encodeURIComponent(code)}&start_date=${start}`;
+  const json = JSON.parse(await fetchTextWithFallback([url], 10000));
+  const rows = (json.data || []).filter(r => Number(r.close ?? r.Close) > 0);
+  const last = rows[rows.length - 1];
+  const price = last ? Number(last.close ?? last.Close) : NaN;
+  if(Number.isFinite(price) && price > 0) return price;
+  throw new Error('FinMind has no price for ' + code);
+}
 
 async function fetchTextWithFallback(urls, timeoutMs = 8000){
   let lastErr = null;
@@ -944,17 +956,28 @@ async function fetchTwLive(){
   if(!holdings.length) return {updated:0, failed:[], twseFailed:false};
 
   const codes = [...new Set(holdings.map(h => normalizeTwCode(h.code)))];
-  let priceByCode = {};
+  const priceByCode = {};
   let twseFailed = false;
-  try{
-    priceByCode = await fetchTwseBatch(codes);
-  }catch(e){
-    twseFailed = true;
-    console.error('TWSE fetch failed, fallback to Yahoo:', e);
+
+  // 1) FinMind（主要）
+  await Promise.all(codes.map(async c=>{
+    try{ priceByCode[c] = await fetchFinMindPrice(c, 'tw'); }
+    catch(e){ console.error(`TW FinMind failed: ${c}`, e); }
+  }));
+
+  // 2) 沒抓到的改用 TWSE 即時報價
+  let missing = codes.filter(c => priceByCode[c] == null);
+  if(missing.length){
+    try{
+      Object.assign(priceByCode, await fetchTwseBatch(missing));
+    }catch(e){
+      twseFailed = true;
+      console.error('TWSE fetch failed, fallback to Yahoo:', e);
+    }
   }
 
-  // TWSE 沒抓到的，逐檔改用 Yahoo
-  const missing = codes.filter(c => priceByCode[c] == null);
+  // 3) 還是沒抓到的，逐檔改用 Yahoo
+  missing = codes.filter(c => priceByCode[c] == null);
   await Promise.all(missing.map(async c=>{
     try{
       priceByCode[c] = await fetchYahooPrice(c);
@@ -980,15 +1003,14 @@ async function fetchUsLive(){
 
   await Promise.all(targets.map(async h=>{
     let price = null;
-    try{
-      price = await fetchYahooPrice(h.code);
-    }catch(e){
-      console.error(`US Yahoo failed: ${h.code}`, e);
-      try{
-        price = await fetchStooqPrice(h.code);
-      }catch(e2){
-        console.error(`US Stooq failed: ${h.code}`, e2);
-      }
+    const sources = [
+      () => fetchFinMindPrice(h.code, 'us'),
+      () => fetchYahooPrice(h.code),
+      () => fetchStooqPrice(h.code),
+    ];
+    for(const src of sources){
+      try{ price = await src(); break; }
+      catch(e){ console.error(`US price source failed: ${h.code}`, e); }
     }
     if(Number.isFinite(price) && price > 0){
       h.price = price;
