@@ -248,7 +248,19 @@ def merge_market(existing: list[dict], fetched: list[dict], prefix: str) -> list
     return out
 
 
-DEFAULT_CORE_CODES = ["0050", "009816", "2330", "2890"]
+DEFAULT_CORE_CODES = ["0050", "009816", "2330", "2890", "VT"]
+
+
+def role_of(h: dict, state: dict) -> str:
+    """核心 / 衛星 / 債券：以網站上設定的 roleMap 為準，沒設定才用預設規則。"""
+    key = (str(h.get("code") or "").strip() or str(h.get("name") or "").strip()).upper()
+    r = (state.get("roleMap") or {}).get(key)
+    if r in ("core", "satellite", "bond"):
+        return r
+    if h.get("category") == "bond":
+        return "bond"
+    core_codes = {str(c).upper() for c in (state.get("coreCodes") or DEFAULT_CORE_CODES)}
+    return "core" if key in core_codes else "satellite"
 
 
 def compute_total(state: dict) -> float:
@@ -258,17 +270,15 @@ def compute_total(state: dict) -> float:
 def compute_breakdown(state: dict) -> dict:
     """總資產與 股票/債券、核心/衛星 分項（新台幣）。和網頁上的算法一致。"""
     fx = num(state.get("fx"), 31.5)
-    core_codes = {str(c).upper() for c in (state.get("coreCodes") or DEFAULT_CORE_CODES)}
     out = {"totalValue": 0.0, "equity": 0.0, "bond": 0.0, "core": 0.0, "satellite": 0.0}
     for market, rate in (("tw", 1.0), ("us", fx)):
         for h in state.get(market, []):
             v = num(h.get("qty")) * num(h.get("price")) * rate
             out["totalValue"] += v
-            if h.get("category") == "bond":
-                out["bond"] += v
-            else:
+            role = role_of(h, state)
+            out[role] += v
+            if role != "bond":
                 out["equity"] += v
-                out["core" if str(h.get("code", "")).upper() in core_codes else "satellite"] += v
     return out
 
 
