@@ -42,6 +42,10 @@ jobs:
           SJ_API_KEY: ${{ secrets.SJ_API_KEY }}
           SJ_SEC_KEY: ${{ secrets.SJ_SEC_KEY }}
         run: |
+          if [ -z "$JSONBIN_MASTER_KEY" ] || { [ -z "$SJ_API_KEY" ] && [ -z "$FT_USERNAME" ]; }; then
+            echo "尚未設定券商或 JSONBin 的 Secrets，略過（可用 Mac 桌面的「更新資產」手動同步）。"
+            exit 0
+          fi
           if [ -n "${{ github.event.inputs.only }}" ]; then
             python sync/sync_holdings.py --only "${{ github.event.inputs.only }}"
           else
