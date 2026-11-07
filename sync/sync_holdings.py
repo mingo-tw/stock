@@ -20,7 +20,7 @@
   python sync/sync_holdings.py --dry-run      # 只印出抓到的持倉，不寫入雲端（第一次請先跑這個）
   python sync/sync_holdings.py                # 抓取並寫入 JSONBin
   python sync/sync_holdings.py --only us      # 只同步美股（或 --only tw）
-  python sync/sync_holdings.py --no-snapshot  # 不自動補本週快照
+  python sync/sync_holdings.py --no-snapshot  # 不記錄今日資產
 """
 from __future__ import annotations
 
@@ -248,14 +248,56 @@ def merge_market(existing: list[dict], fetched: list[dict], prefix: str) -> list
     return out
 
 
+DEFAULT_CORE_CODES = ["0050", "009816", "2330", "2890"]
+
+
 def compute_total(state: dict) -> float:
+    return compute_breakdown(state)["totalValue"]
+
+
+def compute_breakdown(state: dict) -> dict:
+    """總資產與 股票/債券、核心/衛星 分項（新台幣）。和網頁上的算法一致。"""
     fx = num(state.get("fx"), 31.5)
-    tw = sum(num(h.get("qty")) * num(h.get("price")) for h in state.get("tw", []))
-    us = sum(num(h.get("qty")) * num(h.get("price")) for h in state.get("us", []))
-    return tw + us * fx
+    core_codes = {str(c).upper() for c in (state.get("coreCodes") or DEFAULT_CORE_CODES)}
+    out = {"totalValue": 0.0, "equity": 0.0, "bond": 0.0, "core": 0.0, "satellite": 0.0}
+    for market, rate in (("tw", 1.0), ("us", fx)):
+        for h in state.get(market, []):
+            v = num(h.get("qty")) * num(h.get("price")) * rate
+            out["totalValue"] += v
+            if h.get("category") == "bond":
+                out["bond"] += v
+            else:
+                out["equity"] += v
+                out["core" if str(h.get("code", "")).upper() in core_codes else "satellite"] += v
+    return out
+
+
+def upsert_daily_record(state: dict, history: list, date: str) -> dict:
+    """記錄當日總資產；同一天只保留最新一筆。"""
+    b = compute_breakdown(state)
+    rec = {"date": date, **{k: round(v) for k, v in b.items()}, "fx": state.get("fx")}
+    history[:] = [h for h in history if h.get("date") != date]
+    history.append(rec)
+    history.sort(key=lambda h: h.get("date", ""))
+    return rec
 
 
 def fetch_usd_twd() -> float | None:
+    # 1) 臺灣銀行即期買賣中價（FinMind）
+    try:
+        start = (dt.date.today() - dt.timedelta(days=14)).isoformat()
+        r = requests.get(
+            "https://api.finmindtrade.com/api/v4/data",
+            params={"dataset": "TaiwanExchangeRate", "data_id": "USD", "start_date": start}, timeout=20,
+        )
+        rows = [x for x in r.json().get("data", []) if num(x.get("spot_buy")) > 0 and num(x.get("spot_sell")) > 0]
+        if rows:
+            fx = (num(rows[-1]["spot_buy"]) + num(rows[-1]["spot_sell"])) / 2
+            if 25 < fx < 40:
+                return round(fx, 3)
+    except Exception:
+        pass
+    # 2) Yahoo 備援
     try:
         r = requests.get(
             "https://query1.finance.yahoo.com/v8/finance/chart/TWD=X?interval=1d&range=5d",
@@ -272,7 +314,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true", help="只顯示抓到的持倉，不寫入 JSONBin")
     ap.add_argument("--only", choices=["tw", "us"], help="只同步某個市場")
-    ap.add_argument("--no-snapshot", action="store_true", help="不自動新增本週快照")
+    ap.add_argument("--no-snapshot", action="store_true", help="不記錄今日資產")
     args = ap.parse_args()
 
     now = dt.datetime.now(TZ)
@@ -330,16 +372,10 @@ def main() -> int:
             last_sync[market] = prev[market]
     state["lastSync"] = last_sync
 
-    # 每週自動補一筆快照（本週還沒有快照才加）
+    # 記錄今日資產（同一天只保留最新一筆）
     if not args.no_snapshot and any(r["ok"] for r in results.values()):
-        this_week = now.date().isocalendar()[:2]
-        has_this_week = any(
-            dt.date.fromisoformat(s["date"]).isocalendar()[:2] == this_week
-            for s in history if s.get("date")
-        )
-        if not has_this_week:
-            history.append({"date": now.date().isoformat(), "totalValue": compute_total(state), "auto": True})
-            log("已新增本週自動快照")
+        rec = upsert_daily_record(state, history, now.date().isoformat())
+        log(f"已記錄 {rec['date']} 資產 NT$ {rec['totalValue']:,}")
 
     save_bin({"state": state, "history": history})
     log(f"✅ 已寫入 JSONBin，總資產約 NT$ {compute_total(state):,.0f}")
