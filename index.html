@@ -826,6 +826,9 @@ function renderHistory(){
   }).reverse().join('');
 }
 
+// 三張走勢圖左側刻度寬度一致，日期才會上下對齊
+const Y_AXIS_WIDTH = 58;
+
 function renderChart(){
   const ctx = document.getElementById('assetChart').getContext('2d');
   const labels = history.map(h => h.date);
@@ -871,12 +874,13 @@ function renderChart(){
           ticks: { color: '#8B93A7', font: { family: 'Inter', size: 10 } }
         },
         y: {
+          afterFit: scale => { scale.width = Y_AXIS_WIDTH; },
           grid: { color: 'rgba(35, 43, 61, 0.5)' },
           ticks: {
             color: '#8B93A7',
             font: { family: 'Inter', size: 10 },
             callback: function(value) {
-              return 'NT$ ' + (value / 10000).toFixed(0) + '萬';
+              return (value / 10000).toFixed(0) + '萬';
             }
           }
         }
@@ -890,12 +894,14 @@ function renderChart(){
 // ---- 股債比、核心/衛星/債券 比例走勢 ----
 let equityBondChart = null, roleChart = null;
 function renderMixCharts(){
-  // 只有新版開始記錄（含分項金額）的日子才有比例資料
-  const rows = history.filter(h => h.totalValue > 0 && h.equity != null && h.bond != null);
+  // 日期和總資產走勢圖完全對齊；舊紀錄沒有分項金額的日子留白
+  const rows = history;
   const labels = rows.map(h => h.date);
-  const pct = (v, h) => Math.round((v || 0) / h.totalValue * 1000) / 10;
-  const note = rows.length
-    ? `從 ${rows[0].date} 開始每天記錄，目前 ${rows.length} 天`
+  const hasMix = h => h.totalValue > 0 && h.equity != null && h.bond != null;
+  const pct = (v, h) => hasMix(h) ? Math.round((v || 0) / h.totalValue * 1000) / 10 : null;
+  const mixRows = rows.filter(hasMix);
+  const note = mixRows.length
+    ? `從 ${mixRows[0].date} 開始每天記錄，目前 ${mixRows.length} 天（之前的日期沒有比例資料，留白）`
     : '尚無資料，記錄一天後就會出現';
   document.getElementById('mixNote1').textContent = '股票、債券佔總資產的比例；' + note;
   document.getElementById('mixNote2').textContent = '核心、衛星、債券佔總資產的比例；' + note;
@@ -908,6 +914,7 @@ function renderMixCharts(){
     backgroundColor: color,
     borderWidth: 2,
     tension: 0.3,
+    spanGaps: false,
     pointRadius: rows.length < 40 ? 3 : 0,
     pointHoverRadius: 5,
     fill: false
@@ -920,7 +927,8 @@ function renderMixCharts(){
       legend: { display: true, labels: { color: '#8B93A7', font: { family: 'Inter', size: 11 }, boxWidth: 10, boxHeight: 10 } },
       tooltip: {
         callbacks: {
-          label: c => ` ${c.dataset.label}: ${c.raw}%（NT$ ${fmt(c.dataset.amounts[c.dataIndex])}）`
+          label: c => c.raw == null ? ` ${c.dataset.label}: 無資料`
+            : ` ${c.dataset.label}: ${c.raw}%（NT$ ${fmt(c.dataset.amounts[c.dataIndex])}）`
         }
       }
     },
@@ -928,6 +936,7 @@ function renderMixCharts(){
       x: { grid: { color: 'rgba(35, 43, 61, 0.5)' }, ticks: { color: '#8B93A7', font: { family: 'Inter', size: 10 } } },
       y: {
         min: 0, max: 100,
+        afterFit: scale => { scale.width = Y_AXIS_WIDTH; },
         grid: { color: 'rgba(35, 43, 61, 0.5)' },
         ticks: { color: '#8B93A7', font: { family: 'Inter', size: 10 }, stepSize: 20, callback: v => v + '%' }
       }
