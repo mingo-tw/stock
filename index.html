@@ -186,8 +186,15 @@
   }
   .sync-box b{color:var(--text);font-weight:600;}
   .sync-ok{color:var(--loss);}
-  .tag-core{background:rgba(232,140,60,0.16);color:var(--core);cursor:pointer;}
-  .tag-sat{background:rgba(160,120,230,0.16);color:var(--sat);cursor:pointer;}
+  .role-select{
+    margin-left:6px;font-size:10.5px;font-weight:600;font-family:inherit;
+    border-radius:5px;padding:1px 3px;border:1px solid transparent;cursor:pointer;
+    vertical-align:middle;appearance:auto;
+  }
+  .role-select option{background:var(--surface);color:var(--text);}
+  .role-core{background:rgba(232,140,60,0.16);color:var(--core);border-color:rgba(232,140,60,0.35);}
+  .role-satellite{background:rgba(160,120,230,0.16);color:var(--sat);border-color:rgba(160,120,230,0.35);}
+  .role-bond{background:rgba(91,141,239,0.15);color:var(--bond);border-color:rgba(91,141,239,0.35);}
   .alloc-table td, .alloc-table th{padding:8px 6px;}
   .alloc-table td:first-child{white-space:nowrap;}
   .alloc-codes{color:var(--text-dim);font-size:11px;white-space:normal;}
@@ -326,7 +333,7 @@
         <tbody id="roleBody"></tbody>
       </table>
     </div>
-    <div class="hint">點持倉明細裡的「核心／衛星」標籤，可以切換該檔的分類。</div>
+    <div class="hint">在下方「持倉明細」每一檔名稱旁的下拉選單，可以自由設定核心／衛星／債券，選了就自動儲存。</div>
   </div>
 
   <div class="card">
@@ -374,7 +381,7 @@
       <label>平均成本<input type="text" inputmode="decimal" id="twAddAvgCost" placeholder="成本" autocomplete="off"></label>
       <label>現價<input type="text" inputmode="decimal" id="twAddPrice" placeholder="現價" autocomplete="off"></label>
       <label>類別
-        <select id="twAddCategory"><option value="equity">股票</option><option value="bond">債券</option></select>
+        <select id="twAddCategory"><option value="core">核心</option><option value="satellite" selected>衛星</option><option value="bond">債券</option></select>
       </label>
       <button class="btn-ghost btn-small" id="twAddBtn" type="button" style="align-self:flex-end;width:100%;">＋ 新增台股</button>
     </div>
@@ -403,7 +410,7 @@
       <label>平均成本<input type="text" inputmode="decimal" id="usAddAvgCost" placeholder="成本" autocomplete="off"></label>
       <label>現價<input type="text" inputmode="decimal" id="usAddPrice" placeholder="現價" autocomplete="off"></label>
       <label>類別
-        <select id="usAddCategory"><option value="equity">股票</option><option value="bond">債券</option></select>
+        <select id="usAddCategory"><option value="core">核心</option><option value="satellite" selected>衛星</option><option value="bond">債券</option></select>
       </label>
       <button class="btn-ghost btn-small" id="usAddBtn" type="button" style="align-self:flex-end;width:100%;">＋ 新增美股</button>
     </div>
@@ -512,18 +519,57 @@ let state = JSON.parse(JSON.stringify(INITIAL_STATE));
 let history = [];
 let assetChart = null;
 
-// ---- 核心 / 衛星 分類 ----
-const DEFAULT_CORE_CODES = ['0050', '009816', '2330', '2890'];
+// ---- 核心 / 衛星 / 債券 分類（每一檔都可在網站上自由設定，存在 state.roleMap） ----
+const DEFAULT_CORE_CODES = ['0050', '009816', '2330', '2890', 'VT'];
+const ROLES = ['core', 'satellite', 'bond'];
+const ROLE_LABEL = { core:'核心', satellite:'衛星', bond:'債券' };
+function normCode(code){ return String(code || '').trim().toUpperCase(); }
+function holdingKey(h){ return normCode(h.code) || normCode(h.name); }
 function coreCodes(){
   if(!Array.isArray(state.coreCodes)) state.coreCodes = DEFAULT_CORE_CODES.slice();
   return state.coreCodes;
 }
-function normCode(code){ return String(code || '').trim().toUpperCase(); }
-function roleOf(h){
-  if(h.category === 'bond') return 'bond';
-  return coreCodes().includes(normCode(h.code)) ? 'core' : 'satellite';
+function roleMap(){
+  if(!state.roleMap || typeof state.roleMap !== 'object') state.roleMap = {};
+  return state.roleMap;
 }
-const ROLE_LABEL = { core:'核心', satellite:'衛星', bond:'債券' };
+// 沒設定過的標的：債券類 → 債券；在預設核心名單 → 核心；其他 → 衛星
+function defaultRole(h){
+  if(h.category === 'bond') return 'bond';
+  return coreCodes().includes(holdingKey(h)) ? 'core' : 'satellite';
+}
+function roleOf(h){
+  const r = roleMap()[holdingKey(h)];
+  return ROLES.includes(r) ? r : defaultRole(h);
+}
+// 第一次載入新版時：把現有每一檔的分類寫進 roleMap，並依需求把 VT 設為核心
+function migrateRoles(){
+  const m = roleMap();
+  if(state.rolesVersion >= 2) return false;
+  [...state.tw, ...state.us].forEach(h => {
+    const k = holdingKey(h);
+    if(k && !ROLES.includes(m[k])) m[k] = defaultRole(h);
+  });
+  if(m['VT'] !== 'bond') m['VT'] = 'core';
+  state.rolesVersion = 2;
+  syncCategoriesFromRoles();
+  return true;
+}
+// 股票/債券 配置跟著分類走：設成債券的就是債券，其餘是股票
+function syncCategoriesFromRoles(){
+  [...state.tw, ...state.us].forEach(h => { h.category = roleOf(h) === 'bond' ? 'bond' : 'equity'; });
+}
+function setRole(key, role){
+  if(!key || !ROLES.includes(role)) return;
+  roleMap()[key] = role;
+  syncCategoriesFromRoles();
+}
+function roleSelectHtml(h){
+  const r = roleOf(h), k = holdingKey(h);
+  return `<select class="role-select role-${r}" data-key="${k}" title="設定分類">` +
+    ROLES.map(x => `<option value="${x}"${x===r?' selected':''}>${ROLE_LABEL[x]}</option>`).join('') +
+    `</select>`;
+}
 
 function computeTotals(){
   const fx = state.fx || 31.5;
@@ -532,8 +578,9 @@ function computeTotals(){
   const roles = { core:{value:0, codes:[]}, satellite:{value:0, codes:[]}, bond:{value:0, codes:[]} };
 
   const add = (h, valTWD) => {
-    if(h.category === 'bond') bondTWD += valTWD; else equityTWD += valTWD;
-    const r = roles[roleOf(h)];
+    const role = roleOf(h);
+    if(role === 'bond') bondTWD += valTWD; else equityTWD += valTWD;
+    const r = roles[role];
     r.value += valTWD;
     if((h.qty || 0) > 0) r.codes.push(h.code || h.name);
   };
@@ -600,17 +647,12 @@ function renderTable(bodyId, holdings, currencySymbol, market){
     const pnl = value - cost;
     const pnlPct = cost ? (pnl / cost * 100) : 0;
     const pnlClass = pnl >= 0 ? 'delta-up' : 'delta-down';
-    const tagClass = h.category === 'bond' ? 'tag-bond' : 'tag-equity';
-    const tagLabel = h.category === 'bond' ? '債券' : '股票';
     const codeLine = h.note ? h.note : h.code;
-    const role = roleOf(h);
-    const roleTag = role === 'bond' ? '' :
-      `<span class="tag role-tag ${role==='core'?'tag-core':'tag-sat'}" data-code="${h.code||''}" title="點一下切換核心／衛星">${ROLE_LABEL[role]}</span>`;
 
     const tr = document.createElement('tr');
     tr.setAttribute('data-tr-id', h.id);
     tr.innerHTML = `
-      <td><span class="name">${h.name}</span><span class="tag ${tagClass}">${tagLabel}</span>${roleTag}${h.source==='broker'?'<span class="tag tag-sync">同步</span>':''}${codeLine?`<span class="code">${codeLine}</span>`:''}</td>
+      <td><span class="name">${h.name}</span>${roleSelectHtml(h)}${h.source==='broker'?'<span class="tag tag-sync">同步</span>':''}${codeLine?`<span class="code">${codeLine}</span>`:''}</td>
       <td style="text-align:right;"><input class="qty-input" type="text" inputmode="decimal" value="${h.qty}" data-market="${market}" data-id="${h.id}" data-field="qty" autocomplete="off"></td>
       <td style="text-align:right;"><input class="avgcost-input" type="text" inputmode="decimal" value="${h.avgCost || 0}" data-market="${market}" data-id="${h.id}" data-field="avgCost" autocomplete="off"></td>
       <td style="text-align:right;"><input class="price-input" type="text" inputmode="decimal" value="${h.price}" data-market="${market}" data-id="${h.id}" data-field="price" autocomplete="off"></td>
@@ -1220,10 +1262,11 @@ document.getElementById('twAddBtn').addEventListener('click', ()=>{
   const qty = parseFloat(document.getElementById('twAddQty').value) || 0;
   const avgCost = parseFloat(document.getElementById('twAddAvgCost').value) || 0;
   const price = parseFloat(document.getElementById('twAddPrice').value) || 0;
-  const category = document.getElementById('twAddCategory').value;
+  const role = document.getElementById('twAddCategory').value;
   if(!code || !qty){ alert('請填寫代號與股數'); return; }
 
-  state.tw.push({ id:uid('tw'), name, code, qty, avgCost, price, category, manual:true });
+  state.tw.push({ id:uid('tw'), name, code, qty, avgCost, price, category: role==='bond'?'bond':'equity', manual:true });
+  setRole(normCode(code), role);
   saveToCloud(); fullRender();
   ['twAddCode','twAddName','twAddQty','twAddAvgCost','twAddPrice'].forEach(id=>document.getElementById(id).value='');
 });
@@ -1233,27 +1276,25 @@ document.getElementById('usAddBtn').addEventListener('click', ()=>{
   const qty = parseFloat(document.getElementById('usAddQty').value) || 0;
   const avgCost = parseFloat(document.getElementById('usAddAvgCost').value) || 0;
   const price = parseFloat(document.getElementById('usAddPrice').value) || 0;
-  const category = document.getElementById('usAddCategory').value;
+  const role = document.getElementById('usAddCategory').value;
   if(!code || !qty){ alert('請填寫 Ticker 與股數'); return; }
 
-  state.us.push({ id:uid('us'), name:code, code, qty, avgCost, price, category, manual:true });
+  state.us.push({ id:uid('us'), name:code, code, qty, avgCost, price, category: role==='bond'?'bond':'equity', manual:true });
+  setRole(normCode(code), role);
   saveToCloud(); fullRender();
   ['usAddCode','usAddQty','usAddAvgCost','usAddPrice'].forEach(id=>document.getElementById(id).value='');
 });
 
+// 分類下拉選單：核心 / 衛星 / 債券，選了就立即存檔
+document.addEventListener('change', (e)=>{
+  if(!e.target.classList.contains('role-select')) return;
+  setRole(e.target.dataset.key, e.target.value);
+  upsertDailyRecord();
+  fullRender();
+  saveToCloud(false);
+});
+
 document.addEventListener('click', (e)=>{
-  if(e.target.classList.contains('role-tag')){
-    const code = normCode(e.target.dataset.code);
-    if(!code) return;
-    const list = coreCodes();
-    const isCore = list.includes(code);
-    if(!confirm(`把 ${code} 改成「${isCore ? '衛星' : '核心'}」持股？`)) return;
-    state.coreCodes = isCore ? list.filter(c => c !== code) : list.concat(code);
-    upsertDailyRecord();
-    fullRender();
-    saveToCloud(false);
-    return;
-  }
   if(e.target.classList.contains('remove-btn')){
     const market = e.target.dataset.market;
     const id = e.target.dataset.id;
@@ -1290,9 +1331,10 @@ document.getElementById('resetBtn').addEventListener('click', async ()=>{
 
 async function initApp(){
   await loadFromCloud();
-  coreCodes();
+  const migrated = migrateRoles();
   document.getElementById('fxRate').value = state.fx || 31.5;
   fullRender();
+  if(migrated){ upsertDailyRecord(); renderHistory(); saveToCloud(false); }
   // 打開網站就自動更新股價並記錄今日資產（30 分鐘內更新過就不重複）
   const last = state.lastPriceUpdate ? new Date(state.lastPriceUpdate).getTime() : 0;
   if(Date.now() - last > 30 * 60 * 1000) refreshPricesAndRecord(true);
