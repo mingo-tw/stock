@@ -438,6 +438,22 @@
     </div>
   </div>
 
+  <div class="card">
+    <div class="card-title">股債比走勢圖 (%)</div>
+    <div class="card-sub" id="mixNote1">每天記錄股票與債券佔總資產的比例</div>
+    <div class="chart-container">
+      <canvas id="equityBondChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">核心 / 衛星 / 債券 配置走勢圖 (%)</div>
+    <div class="card-sub" id="mixNote2">每天記錄三類資產佔總資產的比例</div>
+    <div class="chart-container">
+      <canvas id="roleChart"></canvas>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -866,6 +882,70 @@ function renderChart(){
         }
       }
     }
+  });
+
+  renderMixCharts();
+}
+
+// ---- 股債比、核心/衛星/債券 比例走勢 ----
+let equityBondChart = null, roleChart = null;
+function renderMixCharts(){
+  // 只有新版開始記錄（含分項金額）的日子才有比例資料
+  const rows = history.filter(h => h.totalValue > 0 && h.equity != null && h.bond != null);
+  const labels = rows.map(h => h.date);
+  const pct = (v, h) => Math.round((v || 0) / h.totalValue * 1000) / 10;
+  const note = rows.length
+    ? `從 ${rows[0].date} 開始每天記錄，目前 ${rows.length} 天`
+    : '尚無資料，記錄一天後就會出現';
+  document.getElementById('mixNote1').textContent = '股票、債券佔總資產的比例；' + note;
+  document.getElementById('mixNote2').textContent = '核心、衛星、債券佔總資產的比例；' + note;
+
+  const line = (label, color, key) => ({
+    label,
+    data: rows.map(h => pct(h[key], h)),
+    amounts: rows.map(h => h[key] || 0),
+    borderColor: color,
+    backgroundColor: color,
+    borderWidth: 2,
+    tension: 0.3,
+    pointRadius: rows.length < 40 ? 3 : 0,
+    pointHoverRadius: 5,
+    fill: false
+  });
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: true, labels: { color: '#8B93A7', font: { family: 'Inter', size: 11 }, boxWidth: 10, boxHeight: 10 } },
+      tooltip: {
+        callbacks: {
+          label: c => ` ${c.dataset.label}: ${c.raw}%（NT$ ${fmt(c.dataset.amounts[c.dataIndex])}）`
+        }
+      }
+    },
+    scales: {
+      x: { grid: { color: 'rgba(35, 43, 61, 0.5)' }, ticks: { color: '#8B93A7', font: { family: 'Inter', size: 10 } } },
+      y: {
+        min: 0, max: 100,
+        grid: { color: 'rgba(35, 43, 61, 0.5)' },
+        ticks: { color: '#8B93A7', font: { family: 'Inter', size: 10 }, stepSize: 20, callback: v => v + '%' }
+      }
+    }
+  };
+
+  if(equityBondChart) equityBondChart.destroy();
+  equityBondChart = new Chart(document.getElementById('equityBondChart').getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets: [ line('股票', '#C9A227', 'equity'), line('債券', '#5B8DEF', 'bond') ] },
+    options
+  });
+
+  if(roleChart) roleChart.destroy();
+  roleChart = new Chart(document.getElementById('roleChart').getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets: [ line('核心', '#E88C3C', 'core'), line('衛星', '#A078E6', 'satellite'), line('債券', '#5B8DEF', 'bond') ] },
+    options
   });
 }
 
