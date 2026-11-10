@@ -199,6 +199,9 @@
   .alloc-table td:first-child{white-space:nowrap;}
   .alloc-codes{color:var(--text-dim);font-size:11px;white-space:normal;}
   .hint{font-size:11px;color:var(--text-dim);margin-top:8px;}
+  .sess{display:block;font-size:9.5px;color:var(--text-dim);margin-top:2px;white-space:nowrap;}
+  .sess-live{color:var(--accent);}
+  .sess-live::before{content:'● ';font-size:8px;}
   .sync-err{color:var(--gain);}
   
   input.price-input, input.qty-input, input.avgcost-input{
@@ -347,7 +350,7 @@
 
     <div class="btnrow" style="margin-top:0;margin-bottom:14px;">
       <button class="btn-primary" id="refreshBtn" type="button">🔄 線上聯網更新最新股價</button>
-      <span class="save-msg" id="refreshStatus" style="color:var(--text-dim);margin-top:0;">打開網站時會自動更新股價並記錄今日資產；也可手動按上方按鈕</span>
+      <span class="save-msg" id="refreshStatus" style="color:var(--text-dim);margin-top:0;">網站開著時每分鐘自動更新即時股價（台股盤中、美股盤前／盤中／盤後）</span>
     </div>
 
     <div class="sync-box" id="syncBox">
@@ -425,7 +428,7 @@
 
   <div class="card">
     <div class="card-title">每日資產紀錄</div>
-    <div class="card-sub">每天自動更新股價並記錄當日總資產；同一天重複記錄只保留最新一筆。</div>
+    <div class="card-sub">每天 15:10（台股收盤後）、06:40（美股收盤後）自動用收盤價記錄；同一天只保留最新一筆。按「記錄今日資產」可手動用目前價格記錄。</div>
     <div class="history-list" id="historyList" style="max-height:260px;">
       <div style="color:var(--text-dim);font-size:12.5px;text-align:center;padding:12px;">尚未有任何紀錄</div>
     </div>
@@ -671,7 +674,7 @@ function renderTable(bodyId, holdings, currencySymbol, market){
       <td><span class="name">${h.name}</span>${roleSelectHtml(h)}${h.source==='broker'?'<span class="tag tag-sync">同步</span>':''}${codeLine?`<span class="code">${codeLine}</span>`:''}</td>
       <td style="text-align:right;"><input class="qty-input" type="text" inputmode="decimal" value="${h.qty}" data-market="${market}" data-id="${h.id}" data-field="qty" autocomplete="off"></td>
       <td style="text-align:right;"><input class="avgcost-input" type="text" inputmode="decimal" value="${h.avgCost || 0}" data-market="${market}" data-id="${h.id}" data-field="avgCost" autocomplete="off"></td>
-      <td style="text-align:right;"><input class="price-input" type="text" inputmode="decimal" value="${h.price}" data-market="${market}" data-id="${h.id}" data-field="price" autocomplete="off"></td>
+      <td style="text-align:right;"><input class="price-input" type="text" inputmode="decimal" value="${h.price}" data-market="${market}" data-id="${h.id}" data-field="price" autocomplete="off">${sessionBadge(h)}</td>
       <td style="text-align:right;" class="val-cell">${currencySymbol}${fmt(value)}</td>
       <td style="text-align:right;" class="pnl-cell ${pnlClass}">${pnl>=0?'+':''}${fmt(pnl)} (${pnlPct.toFixed(1)}%)</td>
       <td style="text-align:right;"><button class="remove-btn" type="button" data-market="${market}" data-id="${h.id}">✕</button></td>
@@ -1220,16 +1223,57 @@ async function fetchStooqPrice(ticker){
   throw new Error('Stooq has no valid price');
 }
 
-async function fetchTwLive(){
+// ---- 即時報價：自己的 Cloudflare 轉接站（台股證交所即時、美股含盤前盤後） ----
+const QUOTE_API = 'https://mingo-quote.dnweimin.workers.dev/quote';
+const US_SYMBOL_RE = /^[A-Z][A-Z0-9.\-]{0,9}$/;
+async function fetchLiveQuotes(){
+  const tw = [...new Set(state.tw.filter(h => isTwCode(h.code)).map(h => normalizeTwCode(h.code)))];
+  const us = [...new Set(state.us.map(h => normCode(h.code)).filter(c => c && !isTwCode(c) && US_SYMBOL_RE.test(c)))];
+  if(!tw.length && !us.length) return {tw:{}, us:{}};
+  const url = `${QUOTE_API}?tw=${tw.join(',')}&us=${us.join(',')}`;
+  const j = JSON.parse(await fetchTextWithFallback([url], 10000));
+  const clean = o => (o && !o._error) ? o : {};
+  return { tw: clean(j.tw), us: clean(j.us) };
+}
+
+// 價格時段標籤
+const SESSION_LABEL = {
+  'regular':'盤中', 'close':'收盤', 'pre':'盤前', 'post':'盤後',
+  'closed:post':'盤後價', 'closed:pre':'盤前價', 'closed:regular':'收盤', 'closed:closed':'收盤', 'fallback':'收盤'
+};
+const SESSION_HINT = {
+  'closed:post':'美股休市（含夜盤時段），顯示最後一筆盤後價',
+  'closed:pre':'美股休市，顯示最後一筆盤前價',
+  'fallback':'即時報價暫時抓不到，改用最近收盤價'
+};
+function sessionBadge(h){
+  const s = h.priceSession; if(!s) return '';
+  const label = SESSION_LABEL[s] || '';
+  if(!label) return '';
+  const live = ['regular','pre','post'].includes(s);
+  const t = h.priceTime ? new Date(h.priceTime) : null;
+  const tt = t && !isNaN(t) ? `${String(t.getMonth()+1).padStart(2,'0')}/${String(t.getDate()).padStart(2,'0')} ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}` : '';
+  const title = (SESSION_HINT[s] || '') + (tt ? `（報價時間 ${tt}）` : '');
+  return `<span class="sess ${live?'sess-live':''}" title="${title}">${label}${tt?' '+tt.slice(6):''}</span>`;
+}
+
+async function fetchTwLive(live = {}){
   const holdings = state.tw.filter(h => isTwCode(h.code));
   if(!holdings.length) return {updated:0, failed:[], twseFailed:false};
 
   const codes = [...new Set(holdings.map(h => normalizeTwCode(h.code)))];
   const priceByCode = {};
+  const metaByCode = {};
   let twseFailed = false;
 
-  // 1) FinMind（主要）
-  await Promise.all(codes.map(async c=>{
+  // 0) 即時報價（轉接站）
+  codes.forEach(c => {
+    const q = live[c];
+    if(q && q.price > 0){ priceByCode[c] = q.price; metaByCode[c] = { session: q.session, time: q.time }; }
+  });
+
+  // 1) 沒拿到即時的，用 FinMind 收盤價
+  await Promise.all(codes.filter(c => priceByCode[c] == null).map(async c=>{
     try{ priceByCode[c] = await fetchFinMindPrice(c, 'tw'); }
     catch(e){ console.error(`TW FinMind failed: ${c}`, e); }
   }));
@@ -1258,19 +1302,31 @@ async function fetchTwLive(){
   let updated = 0;
   const failed = [];
   holdings.forEach(h=>{
-    const p = priceByCode[normalizeTwCode(h.code)];
-    if(p != null){ h.price = p; updated++; }
+    const c = normalizeTwCode(h.code);
+    const p = priceByCode[c];
+    if(p != null){
+      h.price = p; updated++;
+      const m = metaByCode[c];
+      h.priceSession = m ? m.session : 'fallback';
+      h.priceTime = m ? m.time : null;
+    }
     else failed.push(h.name || h.code);
   });
   return {updated, failed, twseFailed};
 }
 
-async function fetchUsLive(){
+async function fetchUsLive(live = {}){
   const targets = state.us.filter(h => h.code && !isTwCode(h.code));
   let updated = 0;
   const failed = [];
 
   await Promise.all(targets.map(async h=>{
+    const q = live[normCode(h.code)];
+    if(q && q.price > 0){
+      h.price = q.price; h.priceSession = q.session; h.priceTime = q.time;
+      updated++;
+      return;
+    }
     let price = null;
     const sources = [
       () => fetchFinMindPrice(h.code, 'us'),
@@ -1283,6 +1339,7 @@ async function fetchUsLive(){
     }
     if(Number.isFinite(price) && price > 0){
       h.price = price;
+      h.priceSession = 'fallback'; h.priceTime = null;
       updated++;
     }else{
       failed.push(h.name || h.code);
@@ -1291,8 +1348,9 @@ async function fetchUsLive(){
   return {updated, failed, total: targets.length};
 }
 
-// 更新股價 + 匯率 → 記錄今日資產 → 存雲端（按鈕與「打開網站時自動執行」共用）
-async function refreshPricesAndRecord(auto = false){
+// 更新即時股價 + 匯率 → 存雲端（按鈕、打開網站、每分鐘自動更新共用）
+// 每日資產紀錄改由 GitHub 每天用「收盤價」記錄（15:10、06:40），避免記到盤前或盤中的價格
+async function refreshPricesAndRecord(auto = false, save = true){
   const statusEl = document.getElementById('refreshStatus');
   const btn = document.getElementById('refreshBtn');
 
@@ -1304,9 +1362,10 @@ async function refreshPricesAndRecord(auto = false){
   // 先把畫面上手動修改過的數字同步進 state，再用新抓到的價格覆蓋「現價」
   if(!auto) syncInputsToStateInMemory();
 
+  const live = await fetchLiveQuotes().catch(e=>{ console.error('live quote', e); return {tw:{}, us:{}}; });
   const [tw, us, fx] = await Promise.all([
-    fetchTwLive().catch(e=>{ console.error(e); return {updated:0, failed:[], twseFailed:true}; }),
-    fetchUsLive().catch(e=>{ console.error(e); return {updated:0, failed:[], total:0}; }),
+    fetchTwLive(live.tw).catch(e=>{ console.error(e); return {updated:0, failed:[], twseFailed:true}; }),
+    fetchUsLive(live.us).catch(e=>{ console.error(e); return {updated:0, failed:[], total:0}; }),
     fetchUsdTwd().catch(e=>{ console.error('fx', e); return null; })
   ]);
   if(fx){
@@ -1315,19 +1374,19 @@ async function refreshPricesAndRecord(auto = false){
   }
 
   const ok = tw.updated + us.updated > 0;
-  if(ok){
-    state.lastPriceUpdate = new Date().toISOString();
-    upsertDailyRecord();
-  }
+  if(ok) state.lastPriceUpdate = new Date().toISOString();
 
   // 重新 render 顯示新價格，再存雲端（不再從舊 input 同步，避免覆蓋）
   fullRender();
-  if(ok) await saveToCloud(false);
+  if(ok && save) await saveToCloud(false);
 
   const twTotal = state.tw.filter(h => isTwCode(h.code)).length;
 
   if(ok){
-    let message = `✅ 台股 ${tw.updated}/${twTotal} 檔、美股 ${us.updated}/${us.total} 檔已更新${fx ? `，匯率 ${fx}` : ''}，已記錄今日資產`;
+    const usSess = [...new Set(state.us.map(h => SESSION_LABEL[h.priceSession]).filter(Boolean))].join('/');
+    const twSess = [...new Set(state.tw.map(h => SESSION_LABEL[h.priceSession]).filter(Boolean))].join('/');
+    const now = new Date(), hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    let message = `✅ ${hhmm} 已更新：台股 ${tw.updated}/${twTotal} 檔${twSess?`（${twSess}）`:''}、美股 ${us.updated}/${us.total} 檔${usSess?`（${usSess}）`:''}${fx ? `，匯率 ${fx}` : ''}`;
     const failedAll = [...tw.failed, ...us.failed];
     if(failedAll.length) message += `（未更新：${failedAll.join('、')}）`;
     statusEl.textContent = message;
@@ -1338,10 +1397,21 @@ async function refreshPricesAndRecord(auto = false){
 
   btn.disabled = false;
   btn.style.opacity = '';
-  setTimeout(()=> {
-    statusEl.textContent = '打開網站時會自動更新股價並記錄今日資產；也可手動按上方按鈕';
+  if(!auto) setTimeout(()=> {
+    statusEl.textContent = '網站開著時每分鐘自動更新即時股價（台股盤中、美股盤前／盤中／盤後）';
   }, 12000);
 }
+
+// 網站開著時，每 60 秒自動更新即時股價（只更新畫面，每 10 分鐘才存一次雲端）
+let lastCloudSaveAt = 0;
+setInterval(() => {
+  if(document.visibilityState !== 'visible') return;
+  if(document.getElementById('mainApp').style.display !== 'block') return;
+  if(document.activeElement && document.activeElement.matches('input, select')) return; // 正在編輯就不打擾
+  const save = Date.now() - lastCloudSaveAt > 10 * 60 * 1000;
+  if(save) lastCloudSaveAt = Date.now();
+  refreshPricesAndRecord(true, save);
+}, 60 * 1000);
 
 document.getElementById('refreshBtn').addEventListener('click', () => refreshPricesAndRecord(false));
 
@@ -1424,9 +1494,9 @@ async function initApp(){
   document.getElementById('fxRate').value = state.fx || 31.5;
   fullRender();
   if(migrated){ upsertDailyRecord(); renderHistory(); saveToCloud(false); }
-  // 打開網站就自動更新股價並記錄今日資產（30 分鐘內更新過就不重複）
-  const last = state.lastPriceUpdate ? new Date(state.lastPriceUpdate).getTime() : 0;
-  if(Date.now() - last > 30 * 60 * 1000) refreshPricesAndRecord(true);
+  // 打開網站就馬上更新即時股價
+  lastCloudSaveAt = Date.now();
+  refreshPricesAndRecord(true, true);
 }
 </script>
 </body>
