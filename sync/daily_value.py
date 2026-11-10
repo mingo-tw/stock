@@ -20,7 +20,32 @@ from sync_holdings import (
 )
 
 FINMIND = "https://api.finmindtrade.com/api/v4/data"
+QUOTE_API = "https://mingo-quote.dnweimin.workers.dev/quote"  # 自己的 Cloudflare 轉接站
 TW_CODE_OK = lambda c: c[:4].isdigit()  # 台股代號開頭是數字（0050、00687B、2330…）
+
+
+def relay_closes(tw_codes: list[str], us_codes: list[str]) -> dict:
+    """
+    從轉接站拿「收盤價」：
+      台股：證交所當天收盤價（14:30 後即為當天收盤；盤中執行則是當下成交價）
+      美股：正式盤收盤價 regularPrice（不含盤前盤後）
+    回傳 {("tw"|"us", code): price}
+    """
+    out = {}
+    try:
+        r = requests.get(QUOTE_API, params={"tw": ",".join(tw_codes), "us": ",".join(us_codes)}, timeout=30)
+        j = r.json()
+        for code, q in (j.get("tw") or {}).items():
+            if isinstance(q, dict) and num(q.get("price")) > 0:
+                out[("tw", code.upper())] = num(q["price"])
+        for code, q in (j.get("us") or {}).items():
+            if isinstance(q, dict):
+                p = num(q.get("regularPrice")) or num(q.get("price"))
+                if p > 0:
+                    out[("us", code.upper())] = p
+    except Exception as e:  # noqa: BLE001
+        log(f"   轉接站失敗，改用 FinMind：{e}")
+    return out
 
 
 def finmind_close(code: str, market: str) -> float | None:
@@ -45,15 +70,24 @@ def main() -> int:
         log("JSONBin 裡沒有持倉資料，結束。")
         return 1
 
+    def ok_code(market, code):
+        return code and not (market == "tw" and not TW_CODE_OK(code)) and len(code) <= 10
+
+    codes = {m: [str(h.get("code") or "").strip().upper() for h in state.get(m, [])] for m in ("tw", "us")}
+    relay = relay_closes([c for c in codes["tw"] if ok_code("tw", c)], [c for c in codes["us"] if ok_code("us", c)])
+    log(f"   轉接站取得 {len(relay)} 檔收盤價")
+
     updated, failed = 0, []
     for market in ("tw", "us"):
         for h in state.get(market, []):
             code = str(h.get("code") or "").strip().upper()
-            if not code or (market == "tw" and not TW_CODE_OK(code)) or len(code) > 10:
+            if not ok_code(market, code):
                 continue  # 沒代號、選擇權等抓不到收盤價的略過，沿用原價
-            p = finmind_close(code, market)
+            p = relay.get((market, code)) or finmind_close(code, market)
             if p:
                 h["price"] = p
+                h["priceSession"] = "close" if market == "tw" else "closed:regular"  # 網站上標示為「收盤」
+                h["priceTime"] = None
                 updated += 1
             else:
                 failed.append(code)
