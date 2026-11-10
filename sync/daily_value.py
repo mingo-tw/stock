@@ -40,7 +40,11 @@ def relay_closes(tw_codes: list[str], us_codes: list[str]) -> dict:
                 out[("tw", code.upper())] = num(q["price"])
         for code, q in (j.get("us") or {}).items():
             if isinstance(q, dict):
-                p = num(q.get("regularPrice")) or num(q.get("price"))
+                if q.get("session") == "regular":
+                    # 美股正在交易中：用前一日收盤，不記盤中價
+                    p = num(q.get("prevClose")) or num(q.get("regularPrice")) or num(q.get("price"))
+                else:
+                    p = num(q.get("regularPrice")) or num(q.get("price"))
                 if p > 0:
                     out[("us", code.upper())] = p
     except Exception as e:  # noqa: BLE001
@@ -63,6 +67,10 @@ def finmind_close(code: str, market: str) -> float | None:
 
 def main() -> int:
     now = dt.datetime.now(TZ)
+    # GitHub 排程常延遲好幾小時；若剛好在台股交易時間執行，價格還不是收盤價，先跳過等下一次
+    if now.weekday() < 5 and dt.time(8, 30) <= now.time() < dt.time(14, 30):
+        log(f"現在 {now:%H:%M} 台股還在交易中，不記錄（等收盤後的排程）。")
+        return 0
     record = load_bin()
     state = record.get("state") or {}
     history = record.get("history") or []
