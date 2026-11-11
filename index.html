@@ -204,6 +204,11 @@
   .sess-live::before{content:'● ';font-size:8px;}
   .sync-err{color:var(--gain);}
   
+  .profit-table{width:100%;border-collapse:collapse;font-size:12.5px;white-space:nowrap;}
+  .profit-table th{position:sticky;top:0;background:var(--surface);color:var(--text-dim);font-weight:500;text-align:right;padding:6px 8px;border-bottom:1px solid rgba(139,147,167,.25);}
+  .profit-table td{text-align:right;padding:6px 8px;border-bottom:1px solid rgba(139,147,167,.12);}
+  .profit-table td:first-child{text-align:left;color:var(--text-dim);}
+  .profit-table .usd{color:var(--text-dim);font-size:11px;margin-left:4px;}
   input.price-input, input.qty-input, input.avgcost-input{
     width:72px;background:var(--surface-2);border:1px solid var(--border);
     color:var(--text);border-radius:6px;padding:4px 6px;font-size:12px;
@@ -428,7 +433,7 @@
 
   <div class="card">
     <div class="card-title">每日資產紀錄</div>
-    <div class="card-sub">每天 15:10（台股收盤後）、06:40（美股收盤後）自動用收盤價記錄；同一天只保留最新一筆。按「記錄今日資產」可手動用目前價格記錄。</div>
+    <div class="card-sub">每天收盤後（台灣 15:10～21:10、06:40）自動用收盤價記錄總資產與台股／美股獲利；同一天只保留最新一筆。按「記錄今日資產」可手動用目前價格記錄。</div>
     <div class="history-list" id="historyList" style="max-height:260px;">
       <div style="color:var(--text-dim);font-size:12.5px;text-align:center;padding:12px;">尚未有任何紀錄</div>
     </div>
@@ -454,6 +459,25 @@
     <div class="card-sub" id="mixNote2">每天記錄三類資產佔總資產的比例</div>
     <div class="chart-container">
       <canvas id="roleChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">台股 / 美股 獲利走勢圖 (NT$)</div>
+    <div class="card-sub" id="profitNote">每天記錄未實現損益（市值 − 成本）</div>
+    <div class="chart-container">
+      <canvas id="profitChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">每日獲利紀錄</div>
+    <div class="card-sub">未實現損益＝市值 − 持股成本；美股以當天匯率換成新台幣，括號內為美元。</div>
+    <div style="overflow-x:auto;max-height:320px;overflow-y:auto;">
+      <table class="profit-table">
+        <thead><tr><th style="text-align:left;">日期</th><th>台股獲利</th><th>美股獲利</th><th>合計獲利</th><th>較前日</th></tr></thead>
+        <tbody id="profitBody"><tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:12px;">尚無資料</td></tr></tbody>
+      </table>
     </div>
   </div>
 
@@ -638,6 +662,9 @@ function upsertDailyRecord(){
     bond: Math.round(t.bondTWD),
     core: Math.round(t.roles.core.value),
     satellite: Math.round(t.roles.satellite.value),
+    twProfit: Math.round(t.twValue - t.twCost),
+    usProfit: Math.round((t.usValueUSD - t.usCostUSD) * (state.fx || 31.5)),
+    usProfitUSD: Math.round((t.usValueUSD - t.usCostUSD) * 100) / 100,
     fx: state.fx
   };
   history = history.filter(h => h.date !== rec.date);
@@ -892,6 +919,7 @@ function renderChart(){
   });
 
   renderMixCharts();
+  renderProfit();
 }
 
 // ---- 股債比、核心/衛星/債券 比例走勢 ----
@@ -959,6 +987,71 @@ function renderMixCharts(){
     data: { labels, datasets: [ line('核心', '#E88C3C', 'core'), line('衛星', '#A078E6', 'satellite'), line('債券', '#5B8DEF', 'bond') ] },
     options
   });
+}
+
+// ---- 台股 / 美股 獲利走勢與表格 ----
+let profitChart = null;
+function renderProfit(){
+  const rows = history;
+  const labels = rows.map(h => h.date);
+  const has = h => h.twProfit != null && h.usProfit != null;
+  const pRows = rows.filter(has);
+  document.getElementById('profitNote').textContent = '每天記錄未實現損益（市值 − 成本）；' + (pRows.length
+    ? `從 ${pRows[0].date} 開始記錄，目前 ${pRows.length} 天（之前的日期沒有獲利資料，留白）`
+    : '尚無資料，記錄一天後就會出現');
+
+  const ds = (label, color, f) => ({
+    label, data: rows.map(h => has(h) ? f(h) : null),
+    borderColor: color, backgroundColor: color, borderWidth: 2, tension: 0.3, spanGaps: false,
+    pointRadius: rows.length < 40 ? 3 : 0, pointHoverRadius: 5, fill: false
+  });
+  if(profitChart) profitChart.destroy();
+  profitChart = new Chart(document.getElementById('profitChart').getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets: [
+      ds('台股獲利', '#E88C3C', h => h.twProfit),
+      ds('美股獲利', '#5B8DEF', h => h.usProfit),
+      ds('合計', '#C9A227', h => h.twProfit + h.usProfit),
+    ] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, labels: { color: '#8B93A7', font: { family: 'Inter', size: 11 }, boxWidth: 10, boxHeight: 10 } },
+        tooltip: { callbacks: { label: c => c.raw == null ? ` ${c.dataset.label}: 無資料`
+          : ` ${c.dataset.label}: ${c.raw >= 0 ? '+' : ''}NT$ ${fmt(c.raw)}` } }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(35, 43, 61, 0.5)' }, ticks: { color: '#8B93A7', font: { family: 'Inter', size: 10 } } },
+        y: {
+          afterFit: scale => { scale.width = Y_AXIS_WIDTH; },
+          grid: { color: 'rgba(35, 43, 61, 0.5)' },
+          ticks: { color: '#8B93A7', font: { family: 'Inter', size: 10 }, callback: v => (v / 10000).toFixed(0) + '萬' }
+        }
+      }
+    }
+  });
+
+  const body = document.getElementById('profitBody');
+  if(!pRows.length){
+    body.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:12px;">尚無資料，記錄一天後就會出現</td></tr>`;
+    return;
+  }
+  const cls = v => v >= 0 ? 'delta-up' : 'delta-down';
+  const sgn = v => (v >= 0 ? '+' : '') + fmt(v);
+  body.innerHTML = pRows.map((h, i) => {
+    const total = h.twProfit + h.usProfit;
+    const prev = i > 0 ? pRows[i-1] : null;
+    const d = prev ? total - (prev.twProfit + prev.usProfit) : null;
+    const usd = h.usProfitUSD != null ? `<span class="usd">(US$ ${sgn(h.usProfitUSD)})</span>` : '';
+    return `<tr>
+      <td>${h.date}</td>
+      <td class="${cls(h.twProfit)}">${sgn(h.twProfit)}</td>
+      <td class="${cls(h.usProfit)}">${sgn(h.usProfit)}${usd}</td>
+      <td class="${cls(total)}"><b>${sgn(total)}</b></td>
+      <td class="${d == null ? '' : cls(d)}">${d == null ? '—' : sgn(d)}</td>
+    </tr>`;
+  }).reverse().join('');
 }
 
 function syncInputsToStateInMemory(){
