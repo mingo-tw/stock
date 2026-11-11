@@ -270,10 +270,18 @@ def compute_total(state: dict) -> float:
 def compute_breakdown(state: dict) -> dict:
     """總資產與 股票/債券、核心/衛星 分項（新台幣）。和網頁上的算法一致。"""
     fx = num(state.get("fx"), 31.5)
-    out = {"totalValue": 0.0, "equity": 0.0, "bond": 0.0, "core": 0.0, "satellite": 0.0}
+    out = {"totalValue": 0.0, "equity": 0.0, "bond": 0.0, "core": 0.0, "satellite": 0.0,
+           "twProfit": 0.0, "usProfit": 0.0, "usProfitUSD": 0.0}
     for market, rate in (("tw", 1.0), ("us", fx)):
         for h in state.get(market, []):
             v = num(h.get("qty")) * num(h.get("price")) * rate
+            # 未實現損益 = 市值 − 成本（美股另外記美元）
+            pnl = num(h.get("qty")) * (num(h.get("price")) - num(h.get("avgCost")))
+            if market == "tw":
+                out["twProfit"] += pnl
+            else:
+                out["usProfitUSD"] += pnl
+                out["usProfit"] += pnl * rate
             out["totalValue"] += v
             role = role_of(h, state)
             out[role] += v
@@ -286,6 +294,7 @@ def upsert_daily_record(state: dict, history: list, date: str) -> dict:
     """記錄當日總資產；同一天只保留最新一筆。"""
     b = compute_breakdown(state)
     rec = {"date": date, **{k: round(v) for k, v in b.items()}, "fx": state.get("fx")}
+    rec["usProfitUSD"] = round(b["usProfitUSD"], 2)
     history[:] = [h for h in history if h.get("date") != date]
     history.append(rec)
     history.sort(key=lambda h: h.get("date", ""))

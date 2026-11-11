@@ -120,7 +120,8 @@ def main() -> int:
     save_bin({"state": state, "history": history})
     log(f"✅ 更新 {updated} 檔報價{f'、匯率 {fx}' if fx else ''}；"
         f"{rec['date']} 總資產 NT$ {rec['totalValue']:,}"
-        f"（核心 {rec['core']:,}／衛星 {rec['satellite']:,}／債券 {rec['bond']:,}）")
+        f"（核心 {rec['core']:,}／衛星 {rec['satellite']:,}／債券 {rec['bond']:,}）；"
+        f"台股獲利 {rec['twProfit']:+,}／美股獲利 {rec['usProfit']:+,}（US$ {rec['usProfitUSD']:+,}）")
     if failed:
         log(f"⚠️ 未更新：{'、'.join(failed)}")
     return 0
