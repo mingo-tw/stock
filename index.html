@@ -1317,7 +1317,7 @@ async function fetchStooqPrice(ticker){
 }
 
 // ---- 即時報價：自己的 Cloudflare 轉接站（台股證交所即時、美股含盤前盤後） ----
-const QUOTE_API = 'https://mingo-quote.dnweimin.workers.dev/quote';
+const QUOTE_API = 'https://mingo-quote.mingo-tw.workers.dev/quote';
 const US_SYMBOL_RE = /^[A-Z][A-Z0-9.\-]{0,9}$/;
 async function fetchLiveQuotes(){
   const tw = [...new Set(state.tw.filter(h => isTwCode(h.code)).map(h => normalizeTwCode(h.code)))];

@@ -20,7 +20,7 @@ from sync_holdings import (
 )
 
 FINMIND = "https://api.finmindtrade.com/api/v4/data"
-QUOTE_API = "https://mingo-quote.dnweimin.workers.dev/quote"  # 自己的 Cloudflare 轉接站
+QUOTE_API = "https://mingo-quote.mingo-tw.workers.dev/quote"  # 自己的 Cloudflare 轉接站
 TW_CODE_OK = lambda c: c[:4].isdigit()  # 台股代號開頭是數字（0050、00687B、2330…）
 
 
