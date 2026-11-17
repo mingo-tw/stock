@@ -201,6 +201,10 @@
   .hint{font-size:11px;color:var(--text-dim);margin-top:8px;}
 
   /* ---- 購屋財務規劃 ---- */
+  .plan-cash{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px;}
+  .plan-cash label{font-size:12px;color:var(--text-dim);display:block;margin-bottom:6px;}
+  .plan-cash-row{display:flex;gap:8px;}
+  .plan-cash-row input{flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 10px;font-size:16px;font-family:inherit;font-variant-numeric:tabular-nums;}
   .page-tabs{display:flex;gap:8px;margin:0 0 18px;}
   .page-tab{flex:1;text-align:center;padding:9px 10px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text-dim);text-decoration:none;font-size:13.5px;font-weight:600;}
   .page-tab.active{background:var(--accent);color:#191305;border-color:var(--accent);}
@@ -518,6 +522,14 @@
   <div class="card" id="planCard">
     <div class="card-title">付款進度與資產推估</div>
     <div class="card-sub" id="planSub">用目前的持股與即時股價推估到交屋，股價一變就自動重算</div>
+    <div class="plan-cash">
+      <label for="planCashInput">💵 目前手上現金（NT$）</label>
+      <div class="plan-cash-row">
+        <input type="text" inputmode="decimal" id="planCashInput" autocomplete="off">
+        <button class="btn-primary btn-small" id="planCashSave" type="button">儲存</button>
+      </div>
+      <div class="hint" id="planCashNote">輸入後會馬上重算；按「儲存」同步到雲端</div>
+    </div>
     <div id="planAlert"></div>
     <div class="plan-kpis" id="planKpis"></div>
 
@@ -1952,9 +1964,17 @@ function renderPlanChart(R){
 }
 
 // ---- 設定表單 ----
+function renderPlanCash(){
+  const p = planCfg();
+  const inp = document.getElementById('planCashInput');
+  if(inp && document.activeElement !== inp) inp.value = fmt(p.cash);
+  const note = document.getElementById('planCashNote');
+  if(note) note.textContent = p.cashUpdated ? `上次更新：${p.cashUpdated}・輸入後會馬上重算，按「儲存」同步到雲端` : '輸入後會馬上重算；按「儲存」同步到雲端';
+}
 function renderPlanForm(){
   const form = document.getElementById('planForm');
   if(!form) return;
+  renderPlanCash();
   const p = planCfg();
   form.innerHTML = PLAN_FIELDS.map(([label, key, type]) => {
     if(type === 'bool') return `<label class="chk"><input type="checkbox" data-plan="${key}" ${p[key]?'checked':''}>${label}</label>`;
@@ -1977,11 +1997,18 @@ function renderPlanPayEdit(){
 function onPlanInput(e){
   const t = e.target;
   const p = planCfg();
-  if(t.dataset.plan){
+  if(t.id === 'planCashInput'){
+    const v = parseFloat(String(t.value).replace(/,/g,''));
+    if(isNaN(v)) return;
+    p.cash = v;
+    const f = document.querySelector('#planForm [data-plan="cash"]');
+    if(f) f.value = v;
+  } else if(t.dataset.plan){
     const key = t.dataset.plan, type = t.dataset.type;
     if(t.type === 'checkbox') p[key] = t.checked;
     else if(type === 'month') p[key] = t.value;
     else { const v = parseFloat(String(t.value).replace(/,/g,'')); if(isNaN(v)) return; p[key] = type === 'pct' ? v/100 : v; }
+    if(key === 'cash') renderPlanCash();
   } else if(t.dataset.pay !== undefined){
     const x = p.payments[+t.dataset.pay]; if(!x) return;
     const f = t.dataset.f;
@@ -1997,6 +2024,7 @@ function setupPlan(){
   card.dataset.ready = '1';
   card.addEventListener('input', onPlanInput);
   card.addEventListener('change', onPlanInput);
+  document.getElementById('planCashInput').addEventListener('blur', () => renderPlanCash());
   card.addEventListener('click', async e => {
     const del = e.target.closest('[data-pay-del]');
     if(del){ planCfg().payments.splice(+del.dataset.payDel, 1); renderPlanPayEdit(); renderPlan(); return; }
@@ -2008,6 +2036,17 @@ function setupPlan(){
       if(!confirm('確定把購屋規劃還原成預設值嗎？')) return;
       state.plan = JSON.parse(JSON.stringify(PLAN_DEFAULT));
       renderPlanForm(); renderPlan(); return;
+    }
+    if(e.target.id === 'planCashSave'){
+      const p = planCfg();
+      const d = new Date(), z = n => String(n).padStart(2,'0');
+      p.cashUpdated = `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`;
+      const note = document.getElementById('planCashNote');
+      note.textContent = '⏳ 儲存中...';
+      await saveToCloud(false);
+      renderPlanCash();
+      document.getElementById('planCashInput').value = fmt(p.cash);
+      return;
     }
     if(e.target.id === 'planSaveBtn'){
       const msg = document.getElementById('planMsg');
