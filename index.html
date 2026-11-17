@@ -201,6 +201,9 @@
   .hint{font-size:11px;color:var(--text-dim);margin-top:8px;}
 
   /* ---- 購屋財務規劃 ---- */
+  .page-tabs{display:flex;gap:8px;margin:0 0 18px;}
+  .page-tab{flex:1;text-align:center;padding:9px 10px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text-dim);text-decoration:none;font-size:13.5px;font-weight:600;}
+  .page-tab.active{background:var(--accent);color:#191305;border-color:var(--accent);}
   .plan-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;}
   .plan-kpi{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;}
   .plan-kpi .k{font-size:11px;color:var(--text-dim);}
@@ -313,8 +316,14 @@
 
 <div class="wrap" id="mainApp">
 
-  <h1>資產配置與走勢</h1>
-  <p class="subtitle">台股 + 美股持倉整合檢視</p>
+  <h1 id="pageTitle">資產配置與走勢</h1>
+  <p class="subtitle" id="pageSub">台股 + 美股持倉整合檢視</p>
+  <nav class="page-tabs">
+    <a href="#" class="page-tab active" data-view="main">📊 資產配置</a>
+    <a href="#plan" class="page-tab" data-view="plan">🏠 購屋規劃</a>
+  </nav>
+
+  <div id="viewMain">
 
   <div class="hero">
     <div class="hero-label">總資產淨值（換算新台幣）</div>
@@ -364,61 +373,6 @@
       </table>
     </div>
     <div class="hint">在下方「持倉明細」每一檔名稱旁的下拉選單，可以自由設定核心／衛星／債券，選了就自動儲存。</div>
-  </div>
-
-  <div class="card" id="planCard">
-    <div class="card-title">🏠 購屋財務規劃 · 潤泰峘翠 A3-25F</div>
-    <div class="card-sub" id="planSub">用目前的持股與即時股價推估到交屋，股價一變就自動重算</div>
-    <div id="planAlert"></div>
-    <div class="plan-kpis" id="planKpis"></div>
-
-    <div class="plan-section">付款進度</div>
-    <div class="table-responsive">
-      <table class="plan-table">
-        <thead><tr><th>月份</th><th style="text-align:left;">項目</th><th>金額</th><th>當月預計資金</th></tr></thead>
-        <tbody id="planPayBody"></tbody>
-      </table>
-    </div>
-
-    <div class="plan-section">資產推估 (NT$)</div>
-    <div class="chart-container"><canvas id="planChart"></canvas></div>
-    <div class="hint">股票每年 +<span id="planEqG">5</span>%、SMCI/SMCX 每年 +<span id="planSmciG">0</span>%（可在下方設定修改）；黑線為扣掉質押借款後的淨資產。</div>
-
-    <div class="plan-section">每年現金流（萬元）</div>
-    <div class="table-responsive">
-      <table class="plan-table">
-        <thead><tr><th>年度</th><th>薪資</th><th>配股</th><th>現金股息</th><th>所得稅</th><th>生活支出</th><th>定期定額</th><th>房屋款</th><th>質押</th><th>房貸</th><th>淨現金流</th><th>年底資產</th></tr></thead>
-        <tbody id="planYearBody"></tbody>
-      </table>
-    </div>
-
-    <details class="plan-details">
-      <summary>每月現金流明細</summary>
-      <div class="table-responsive" style="max-height:360px;overflow-y:auto;">
-        <table class="plan-table">
-          <thead><tr><th>月份</th><th>薪資</th><th>配股留現金</th><th>現金股息</th><th>所得稅</th><th>生活支出</th><th>定期定額</th><th>房屋款</th><th>質押</th><th>房貸</th><th>淨現金流</th><th>賣出補足</th><th>月底現金</th></tr></thead>
-          <tbody id="planMonthBody"></tbody>
-        </table>
-      </div>
-      <div class="hint">配股在交屋前歸屬就賣、轉投短天期債（「配股債券」），不進現金流；房屋款不夠時先動用債券，其他支出不夠時先賣衛星股，再賣核心股。</div>
-    </details>
-
-    <details class="plan-details">
-      <summary>⚙️ 規劃設定（收入、支出、房貸、付款表）</summary>
-      <div class="plan-form" id="planForm"></div>
-      <div class="plan-section">付款表（勾選＝已付）</div>
-      <div class="table-responsive">
-        <table class="plan-pay"><thead><tr><th style="text-align:left;">月份 (YYYY-MM)</th><th style="text-align:left;">項目</th><th>金額</th><th>已付</th><th></th></tr></thead>
-        <tbody id="planPayEdit"></tbody></table>
-      </div>
-      <div class="btnrow">
-        <button class="btn-ghost btn-small" id="planAddPay" type="button">＋ 新增付款</button>
-        <button class="btn-primary btn-small" id="planSaveBtn" type="button">☁️ 儲存規劃</button>
-        <button class="btn-ghost btn-small" id="planResetBtn" type="button">還原預設</button>
-        <span class="save-msg" id="planMsg" style="opacity:0;transition:opacity .3s;"></span>
-      </div>
-      <div class="hint">規劃資料和持股一起存在你的雲端資料（需密碼才能讀取）。</div>
-    </details>
   </div>
 
   <div class="card">
@@ -557,6 +511,65 @@
       </table>
     </div>
   </div>
+
+  </div><!-- /viewMain -->
+
+  <div id="viewPlan" style="display:none;">
+  <div class="card" id="planCard">
+    <div class="card-title">付款進度與資產推估</div>
+    <div class="card-sub" id="planSub">用目前的持股與即時股價推估到交屋，股價一變就自動重算</div>
+    <div id="planAlert"></div>
+    <div class="plan-kpis" id="planKpis"></div>
+
+    <div class="plan-section">付款進度</div>
+    <div class="table-responsive">
+      <table class="plan-table">
+        <thead><tr><th>月份</th><th style="text-align:left;">項目</th><th>金額</th><th>當月預計資金</th></tr></thead>
+        <tbody id="planPayBody"></tbody>
+      </table>
+    </div>
+
+    <div class="plan-section">資產推估 (NT$)</div>
+    <div class="chart-container"><canvas id="planChart"></canvas></div>
+    <div class="hint">股票每年 +<span id="planEqG">5</span>%、SMCI/SMCX 每年 +<span id="planSmciG">0</span>%（可在下方設定修改）；黑線為扣掉質押借款後的淨資產。</div>
+
+    <div class="plan-section">每年現金流（萬元）</div>
+    <div class="table-responsive">
+      <table class="plan-table">
+        <thead><tr><th>年度</th><th>薪資</th><th>配股</th><th>現金股息</th><th>所得稅</th><th>生活支出</th><th>定期定額</th><th>房屋款</th><th>質押</th><th>房貸</th><th>淨現金流</th><th>年底資產</th></tr></thead>
+        <tbody id="planYearBody"></tbody>
+      </table>
+    </div>
+
+    <details class="plan-details">
+      <summary>每月現金流明細</summary>
+      <div class="table-responsive" style="max-height:360px;overflow-y:auto;">
+        <table class="plan-table">
+          <thead><tr><th>月份</th><th>薪資</th><th>配股留現金</th><th>現金股息</th><th>所得稅</th><th>生活支出</th><th>定期定額</th><th>房屋款</th><th>質押</th><th>房貸</th><th>淨現金流</th><th>賣出補足</th><th>月底現金</th></tr></thead>
+          <tbody id="planMonthBody"></tbody>
+        </table>
+      </div>
+      <div class="hint">配股在交屋前歸屬就賣、轉投短天期債（「配股債券」），不進現金流；房屋款不夠時先動用債券，其他支出不夠時先賣衛星股，再賣核心股。</div>
+    </details>
+
+    <details class="plan-details">
+      <summary>⚙️ 規劃設定（收入、支出、房貸、付款表）</summary>
+      <div class="plan-form" id="planForm"></div>
+      <div class="plan-section">付款表（勾選＝已付）</div>
+      <div class="table-responsive">
+        <table class="plan-pay"><thead><tr><th style="text-align:left;">月份 (YYYY-MM)</th><th style="text-align:left;">項目</th><th>金額</th><th>已付</th><th></th></tr></thead>
+        <tbody id="planPayEdit"></tbody></table>
+      </div>
+      <div class="btnrow">
+        <button class="btn-ghost btn-small" id="planAddPay" type="button">＋ 新增付款</button>
+        <button class="btn-primary btn-small" id="planSaveBtn" type="button">☁️ 儲存規劃</button>
+        <button class="btn-ghost btn-small" id="planResetBtn" type="button">還原預設</button>
+        <span class="save-msg" id="planMsg" style="opacity:0;transition:opacity .3s;"></span>
+      </div>
+      <div class="hint">規劃資料和持股一起存在你的雲端資料（需密碼才能讀取）。</div>
+    </details>
+  </div>
+  </div><!-- /viewPlan -->
 
 </div>
 
@@ -2005,6 +2018,27 @@ function setupPlan(){
   });
   renderPlanForm();
 }
+
+
+// ---- 分頁：資產配置 / 購屋規劃（網址 #plan） ----
+function showView(){
+  const plan = location.hash === '#plan';
+  document.getElementById('viewMain').style.display = plan ? 'none' : '';
+  document.getElementById('viewPlan').style.display = plan ? '' : 'none';
+  document.querySelectorAll('.page-tab').forEach(t => t.classList.toggle('active', (t.dataset.view === 'plan') === plan));
+  document.getElementById('pageTitle').textContent = plan ? '購屋財務規劃' : '資產配置與走勢';
+  document.getElementById('pageSub').textContent = plan ? '潤泰峘翠 A3-25F・用目前持股與即時股價推估到交屋' : '台股 + 美股持倉整合檢視';
+  document.title = plan ? '購屋財務規劃' : '資產配置與走勢追蹤';
+  if(plan && planChart) requestAnimationFrame(() => planChart.resize());
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll('.page-tab').forEach(t => t.addEventListener('click', e => {
+  e.preventDefault();
+  window.history.replaceState(null, '', t.dataset.view === 'plan' ? '#plan' : location.pathname + location.search);
+  showView();
+}));
+window.addEventListener('hashchange', showView);
+showView();
 
 async function initApp(){
   await loadFromCloud();
