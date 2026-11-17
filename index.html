@@ -199,6 +199,31 @@
   .alloc-table td:first-child{white-space:nowrap;}
   .alloc-codes{color:var(--text-dim);font-size:11px;white-space:normal;}
   .hint{font-size:11px;color:var(--text-dim);margin-top:8px;}
+
+  /* ---- 購屋財務規劃 ---- */
+  .page-tabs{display:flex;gap:8px;margin:0 0 18px;}
+  .page-tab{flex:1;text-align:center;padding:9px 10px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text-dim);text-decoration:none;font-size:13.5px;font-weight:600;}
+  .page-tab.active{background:var(--accent);color:#191305;border-color:var(--accent);}
+  .plan-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;}
+  .plan-kpi{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;}
+  .plan-kpi .k{font-size:11px;color:var(--text-dim);}
+  .plan-kpi .v{font-size:18px;font-weight:600;margin-top:4px;color:var(--text);font-variant-numeric:tabular-nums;}
+  .plan-kpi .s{font-size:11px;color:var(--text-dim);margin-top:3px;}
+  .plan-warn{background:rgba(229,72,77,0.12);border:1px solid rgba(229,72,77,0.4);color:var(--text);border-radius:10px;padding:8px 12px;font-size:12.5px;margin-bottom:12px;}
+  .plan-ok{background:rgba(47,179,128,0.10);border:1px solid rgba(47,179,128,0.35);color:var(--text);border-radius:10px;padding:8px 12px;font-size:12.5px;margin-bottom:12px;}
+  .plan-section{font-size:13px;font-weight:600;margin:16px 0 8px;color:var(--text);}
+  .plan-table td,.plan-table th{padding:7px 6px;font-variant-numeric:tabular-nums;}
+  .plan-table tr.paid td{color:var(--text-dim);text-decoration:line-through;}
+  .plan-table tr.yr td{border-bottom:1px solid var(--text-dim);}
+  .plan-details{margin-top:12px;border:1px solid var(--border);border-radius:10px;padding:8px 12px;}
+  .plan-details summary{cursor:pointer;font-size:12.5px;color:var(--text);padding:4px 0;}
+  .plan-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px 12px;margin-top:10px;}
+  .plan-form label{display:flex;flex-direction:column;font-size:11px;color:var(--text-dim);gap:3px;}
+  .plan-form input,.plan-pay input{background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:5px 8px;font-size:12.5px;font-family:inherit;width:100%;box-sizing:border-box;}
+  .plan-form label.chk{flex-direction:row;align-items:center;gap:6px;}
+  .plan-form label.chk input{width:auto;}
+  .plan-pay td{padding:4px 4px;}
+  .plan-pay input[type=checkbox]{width:auto;}
   .sess{display:block;font-size:9.5px;color:var(--text-dim);margin-top:2px;white-space:nowrap;}
   .sess-live{color:var(--accent);}
   .sess-live::before{content:'● ';font-size:8px;}
@@ -291,8 +316,14 @@
 
 <div class="wrap" id="mainApp">
 
-  <h1>資產配置與走勢</h1>
-  <p class="subtitle">台股 + 美股持倉整合檢視</p>
+  <h1 id="pageTitle">資產配置與走勢</h1>
+  <p class="subtitle" id="pageSub">台股 + 美股持倉整合檢視</p>
+  <nav class="page-tabs">
+    <a href="#" class="page-tab active" data-view="main">📊 資產配置</a>
+    <a href="#plan" class="page-tab" data-view="plan">🏠 購屋規劃</a>
+  </nav>
+
+  <div id="viewMain">
 
   <div class="hero">
     <div class="hero-label">總資產淨值（換算新台幣）</div>
@@ -480,6 +511,65 @@
       </table>
     </div>
   </div>
+
+  </div><!-- /viewMain -->
+
+  <div id="viewPlan" style="display:none;">
+  <div class="card" id="planCard">
+    <div class="card-title">付款進度與資產推估</div>
+    <div class="card-sub" id="planSub">用目前的持股與即時股價推估到交屋，股價一變就自動重算</div>
+    <div id="planAlert"></div>
+    <div class="plan-kpis" id="planKpis"></div>
+
+    <div class="plan-section">付款進度</div>
+    <div class="table-responsive">
+      <table class="plan-table">
+        <thead><tr><th>月份</th><th style="text-align:left;">項目</th><th>金額</th><th>當月預計資金</th></tr></thead>
+        <tbody id="planPayBody"></tbody>
+      </table>
+    </div>
+
+    <div class="plan-section">資產推估 (NT$)</div>
+    <div class="chart-container"><canvas id="planChart"></canvas></div>
+    <div class="hint">股票每年 +<span id="planEqG">5</span>%、SMCI/SMCX 每年 +<span id="planSmciG">0</span>%（可在下方設定修改）；黑線為扣掉質押借款後的淨資產。</div>
+
+    <div class="plan-section">每年現金流（萬元）</div>
+    <div class="table-responsive">
+      <table class="plan-table">
+        <thead><tr><th>年度</th><th>薪資</th><th>配股</th><th>現金股息</th><th>所得稅</th><th>生活支出</th><th>定期定額</th><th>房屋款</th><th>質押</th><th>房貸</th><th>淨現金流</th><th>年底資產</th></tr></thead>
+        <tbody id="planYearBody"></tbody>
+      </table>
+    </div>
+
+    <details class="plan-details">
+      <summary>每月現金流明細</summary>
+      <div class="table-responsive" style="max-height:360px;overflow-y:auto;">
+        <table class="plan-table">
+          <thead><tr><th>月份</th><th>薪資</th><th>配股留現金</th><th>現金股息</th><th>所得稅</th><th>生活支出</th><th>定期定額</th><th>房屋款</th><th>質押</th><th>房貸</th><th>淨現金流</th><th>賣出補足</th><th>月底現金</th></tr></thead>
+          <tbody id="planMonthBody"></tbody>
+        </table>
+      </div>
+      <div class="hint">配股在交屋前歸屬就賣、轉投短天期債（「配股債券」），不進現金流；房屋款不夠時先動用債券，其他支出不夠時先賣衛星股，再賣核心股。</div>
+    </details>
+
+    <details class="plan-details">
+      <summary>⚙️ 規劃設定（收入、支出、房貸、付款表）</summary>
+      <div class="plan-form" id="planForm"></div>
+      <div class="plan-section">付款表（勾選＝已付）</div>
+      <div class="table-responsive">
+        <table class="plan-pay"><thead><tr><th style="text-align:left;">月份 (YYYY-MM)</th><th style="text-align:left;">項目</th><th>金額</th><th>已付</th><th></th></tr></thead>
+        <tbody id="planPayEdit"></tbody></table>
+      </div>
+      <div class="btnrow">
+        <button class="btn-ghost btn-small" id="planAddPay" type="button">＋ 新增付款</button>
+        <button class="btn-primary btn-small" id="planSaveBtn" type="button">☁️ 儲存規劃</button>
+        <button class="btn-ghost btn-small" id="planResetBtn" type="button">還原預設</button>
+        <span class="save-msg" id="planMsg" style="opacity:0;transition:opacity .3s;"></span>
+      </div>
+      <div class="hint">規劃資料和持股一起存在你的雲端資料（需密碼才能讀取）。</div>
+    </details>
+  </div>
+  </div><!-- /viewPlan -->
 
 </div>
 
@@ -767,6 +857,7 @@ function updateGlobalDisplaysOnly(){
   document.getElementById('bondValText').textContent = `債券總額：NT$ ${fmt(totals.bondTWD)}`;
 
   renderRoleAllocation(totals);
+  renderPlan();
 }
 
 function renderRoleAllocation(totals){
@@ -1126,7 +1217,9 @@ async function loadFromCloud(){
     if(res.ok){
       const data = await res.json();
       if(data.record && data.record.state){
+        const localPlan = state.plan;
         state = data.record.state;
+        if(!state.plan && localPlan) state.plan = localPlan;
         history = data.record.history || [];
       }
     }
@@ -1581,9 +1674,376 @@ document.getElementById('resetBtn').addEventListener('click', async ()=>{
   if(k) unlock(k);
 })();
 
+// =====================================================================
+// 購屋財務規劃：用目前持股（即時股價）推估到交屋，每次股價／持股變動就重算
+// 設定存在 state.plan，跟持股一起同步到雲端
+// =====================================================================
+const PLAN_DEFAULT = {
+  salary:120000, raise:0.05, bonusMonths:3, bonusMonth:2, insurance:3200, taxMonthly:20000,
+  rsuShares:1000, rsuPrice:40, rsuUseLive:false,
+  filial:10000, living:20000, rent:15000, mgmtFee:5000, credit:10000, creditEnd:'2029-12', inflation:0.02,
+  dca009816:30000, dca00687B:10000,
+  cash:2400000, pledge:1500000, pledgeRate:0.02, pledgeDue:'2027-04',
+  eqGrowth:0.05, smciGrowth:0, cashRate:0.015, rsuBondYield:0.045,
+  loan:21673000, rate:0.025, years:35, delivery:'2030-12', firstPay:'2031-01',
+  closingCost:600000, reno:1500000, stopReinvestAfterDelivery:false,
+  payments:[
+    { month:'2026-11', label:'定金', amount:100000, paid:true },
+    { month:'2026-11', label:'簽約金', amount:1923000, paid:false },
+    { month:'2027-03', label:'工程款 1・七樓底版', amount:569000, paid:false },
+    { month:'2027-09', label:'工程款 2・十六樓底版', amount:569000, paid:false },
+    { month:'2028-03', label:'工程款 3・二十三樓底版', amount:864000, paid:false },
+    { month:'2028-08', label:'工程款 4・屋頂底版', amount:864000, paid:false },
+    { month:'2029-06', label:'工程款 5・申請使照', amount:894000, paid:false },
+    { month:'2030-12', label:'交屋款 5%', amount:1453000, paid:false },
+  ]
+};
+
+// [label, key, type]  type: num | pct | month | bool
+const PLAN_FIELDS = [
+  ['月薪（元）','salary','num'], ['每年調薪','raise','pct'], ['年終月數','bonusMonths','num'], ['年終發放月份 (1-12)','bonusMonth','num'],
+  ['勞健保／月','insurance','num'], ['所得稅分期／月','taxMonthly','num'],
+  ['每年配股股數','rsuShares','num'], ['配股估價 (US$)','rsuPrice','num'], ['配股改用 SMCI 即時股價','rsuUseLive','bool'],
+  ['孝親費／月','filial','num'], ['日常開銷／月','living','num'], ['房租／月（交屋前）','rent','num'], ['管理費／月（交屋後）','mgmtFee','num'],
+  ['信貸／月','credit','num'], ['信貸最後一期','creditEnd','month'], ['孝親＋日常通膨','inflation','pct'],
+  ['定期定額 009816／月','dca009816','num'], ['定期定額 00687B／月','dca00687B','num'],
+  ['目前現金','cash','num'], ['質押借款','pledge','num'], ['質押利息（整期）','pledgeRate','pct'], ['質押到期月','pledgeDue','month'],
+  ['股票年報酬','eqGrowth','pct'], ['SMCI/SMCX 年報酬','smciGrowth','pct'], ['現金年利率','cashRate','pct'], ['配股債券殖利率','rsuBondYield','pct'],
+  ['銀行貸款金額','loan','num'], ['房貸利率','rate','pct'], ['貸款年期','years','num'],
+  ['交屋月','delivery','month'], ['房貸首繳月','firstPay','month'], ['交屋稅費代書','closingCost','num'], ['裝潢','reno','num'],
+  ['交屋後停止股息再投入','stopReinvestAfterDelivery','bool'],
+];
+
+// 各檔殖利率與是否再投入；沒列到的：債券 4% 再投入、台股 2%、美股 1.5% 領現金
+const PLAN_YIELD = {
+  '0050':[0.025,false], '2330':[0.01,false], '3081':[0.01,false], '2890':[0.035,true], '009816':[0,false],
+  'VT':[0.018,false], '00687B':[0.038,true], '00937B':[0.05,true], 'SMCI':[0,false], 'SMCX':[0,false], 'NVDA':[0,false], 'TLT':[0.04,true],
+};
+
+let planChart = null;
+
+function planCfg(){
+  if(!state.plan || typeof state.plan !== 'object') state.plan = JSON.parse(JSON.stringify(PLAN_DEFAULT));
+  for(const k in PLAN_DEFAULT){ if(state.plan[k] === undefined) state.plan[k] = JSON.parse(JSON.stringify(PLAN_DEFAULT[k])); }
+  return state.plan;
+}
+const ymIdx = s => { const [y,m] = String(s||'').split('-').map(Number); return (y||2000)*12 + ((m||1)-1); };
+const ymLabel = i => Math.floor(i/12) + '-' + String(i%12+1).padStart(2,'0');
+const wan = v => (Math.round((v||0)/1000)/10).toLocaleString('en-US', {minimumFractionDigits:1, maximumFractionDigits:1});
+const wan0 = v => Math.round((v||0)/1e4).toLocaleString('en-US');
+
+function smciLivePrice(){
+  const h = state.us.find(x => normCode(x.code) === 'SMCI');
+  return h && h.price > 0 ? h.price : null;
+}
+
+function simulatePlan(p){
+  const fx = state.fx || 31.5;
+  const now = new Date();
+  const start = now.getFullYear()*12 + now.getMonth();
+  const deliv = ymIdx(p.delivery), first = ymIdx(p.firstPay);
+  const end = Math.max(deliv + 12, start + 1);
+  const creditEnd = ymIdx(p.creditEnd), pledgeDue = ymIdx(p.pledgeDue);
+
+  // 1. 用目前持股（即時股價）建立起點
+  const H = [];
+  const add = (h, market) => {
+    const code = normCode(h.code) || normCode(h.name);
+    const v = (h.qty||0) * (h.price||0) * (market === 'us' ? fx : 1);
+    if(!(v > 0)) return;
+    const role = roleOf(h);
+    let [yld, re] = PLAN_YIELD[code] || (role === 'bond' ? [0.04, true] : [market === 'us' ? 0.015 : 0.02, false]);
+    const smci = code === 'SMCI' || code === 'SMCX';
+    const g = role === 'bond' ? 0 : smci ? p.smciGrowth : code === '009816' ? p.eqGrowth + 0.02 : p.eqGrowth;
+    H.push({ code, role, v, g, yld, re, twDiv: market === 'tw' && role !== 'bond' });
+  };
+  state.tw.forEach(h => add(h, 'tw'));
+  state.us.forEach(h => add(h, 'us'));
+  const getH = (code, role, g, yld, re) => {
+    let h = H.find(x => x.code === code);
+    if(!h){ h = { code, role, v:0, g, yld, re }; H.push(h); }
+    return h;
+  };
+  const rsuBond = getH('配股債券', 'bond', 0, p.rsuBondYield, true);
+  const dcaTargets = [
+    [getH('009816', 'core', p.eqGrowth + 0.02, 0, false), +p.dca009816 || 0],
+    [getH('00687B', 'bond', 0, 0.038, true), +p.dca00687B || 0],
+  ];
+  const startValue = H.reduce((s,h) => s + h.v, 0);
+
+  // 2. 付款表（未付的才算；過期未付的放到這個月）
+  const pay = {};
+  (p.payments || []).forEach(x => {
+    if(x.paid) return;
+    const k = Math.max(ymIdx(x.month), start);
+    pay[k] = (pay[k] || 0) + (+x.amount || 0);
+  });
+  if(deliv >= start) pay[deliv] = (pay[deliv] || 0) + (+p.closingCost || 0) + (+p.reno || 0);
+
+  const r = p.rate / 12, n = p.years * 12;
+  const pmt = r > 0 ? p.loan * r / (1 - Math.pow(1 + r, -n)) : p.loan / n;
+  const rsuPx = p.rsuUseLive ? (smciLivePrice() || p.rsuPrice) : p.rsuPrice;
+
+  const isBond = h => h.role === 'bond', isSat = h => h.role === 'satellite', isCore = h => h.role === 'core';
+  const sell = (x, groups) => {
+    for(const f of groups){
+      const items = H.filter(f);
+      const tot = items.reduce((s,h) => s + h.v, 0);
+      if(tot <= 0 || x <= 0) continue;
+      const t = Math.min(tot, x);
+      items.forEach(h => h.v -= t * h.v / tot);
+      x -= t;
+    }
+    return x;
+  };
+
+  let cash = +p.cash || 0, pledge = +p.pledge || 0, infl = 1, shortfall = 0;
+  const rows = [];
+  for(let i = start; i <= end; i++){
+    const y = Math.floor(i/12), m = i % 12 + 1;
+    if(i > start){
+      H.forEach(h => h.v *= Math.pow(1 + h.g, 1/12));
+      cash *= Math.pow(1 + p.cashRate, 1/12);
+      if(m === 1) infl *= 1 + p.inflation;
+    }
+    const moved = i > deliv;
+    const sal = p.salary * Math.pow(1 + p.raise, y - now.getFullYear());
+    const salary = sal + (m === +p.bonusMonth ? sal * p.bonusMonths : 0);
+
+    let divCash = 0, divRe = 0;
+    H.forEach(h => {
+      const d = h.v * h.yld / 12;
+      if(h.re && !(moved && p.stopReinvestAfterDelivery)){ h.v += d; divRe += d; }
+      else divCash += d;
+    });
+
+    const rsu = m % 3 === 0 ? p.rsuShares / 4 * rsuPx * fx : 0;
+    let rsuCash = 0, rsuToBond = 0;
+    if(rsu){ if(i < deliv){ rsuBond.v += rsu; rsuToBond = rsu; } else rsuCash = rsu; }
+
+    const living = (p.filial + p.living) * infl + (moved ? p.mgmtFee : p.rent) + (i <= creditEnd ? p.credit : 0);
+    let dca = 0;
+    dcaTargets.forEach(([h, a]) => { if(a > 0){ h.v += a; dca += a; } });
+    const house = pay[i] || 0;
+    let pledgeRepay = 0;
+    if(pledge > 0 && i >= pledgeDue){ pledgeRepay = pledge * (1 + p.pledgeRate); pledge = 0; }
+    const mort = i >= first ? pmt : 0;
+
+    const net = salary - p.insurance - p.taxMonthly + rsuCash + divCash - living - dca - house - pledgeRepay - mort;
+    cash += net;
+    let sold = 0;
+    if(cash < 0){
+      sold = -cash;
+      const left = sell(-cash, house > 0 ? [isBond, isSat, isCore] : [isSat, isCore, isBond]);
+      cash = 0;
+      if(left > 1){ cash = -left; shortfall += left; sold -= left; }
+    }
+    const bonds = H.filter(isBond).reduce((s,h) => s + h.v, 0);
+    const equity = H.filter(h => !isBond(h)).reduce((s,h) => s + h.v, 0);
+    rows.push({ i, month: ymLabel(i), y, m, salary, insurance: p.insurance, rsu, rsuCash, rsuToBond, divCash, divRe,
+      tax: p.taxMonthly, living, dca, house, pledgeRepay, mort, net, sold, cash, bonds, equity,
+      total: cash + bonds + equity - pledge, bonusExtra: salary - sal, base: sal });
+  }
+  return { rows, pmt, start, deliv, first, startValue, startCash: +p.cash || 0, shortfall, rsuPx };
+}
+
+function planKpi(k, v, s){ return `<div class="plan-kpi"><div class="k">${k}</div><div class="v">${v}</div>${s ? `<div class="s">${s}</div>` : ''}</div>`; }
+
+function renderPlan(){
+  if(!document.getElementById('planCard')) return;
+  const p = planCfg();
+  const sim = simulatePlan(p);
+  const R = sim.rows;
+  const at = i => R.find(r => r.i === i);
+  const before = at(sim.deliv - 1) || R[R.length - 1];
+  const after = R.filter(r => r.i > sim.deliv);
+  const ordinary = after.find(r => r.m % 3 !== 0 && r.m !== +p.bonusMonth);
+  const lastYear = after.length ? after[after.length - 1] : R[R.length - 1];
+  const bonusAvg = ordinary ? ordinary.base * p.bonusMonths / 12 : 0;
+  const next = (p.payments || []).filter(x => !x.paid).sort((a,b) => ymIdx(a.month) - ymIdx(b.month))[0];
+  const pctSalary = sim.pmt / (p.salary * Math.pow(1 + p.raise, Math.floor(sim.first/12) - new Date().getFullYear()) * (12 + +p.bonusMonths) / 12);
+
+  document.getElementById('planEqG').textContent = (p.eqGrowth*100).toFixed(1).replace(/\.0$/,'');
+  document.getElementById('planSmciG').textContent = (p.smciGrowth*100).toFixed(1).replace(/\.0$/,'');
+  document.getElementById('planSub').textContent =
+    `起點：持股 NT$ ${fmt(sim.startValue)}（即時股價、匯率 ${state.fx}）＋現金 NT$ ${fmt(sim.startCash)}` + (p.pledge > 0 ? `，質押 NT$ ${fmt(p.pledge)}` : '');
+
+  const unpaid = (p.payments || []).filter(x => !x.paid).reduce((s,x) => s + (+x.amount||0), 0);
+  const alertEl = document.getElementById('planAlert');
+  if(sim.shortfall > 1){
+    const firstShort = R.find(r => r.cash < 0);
+    alertEl.innerHTML = `<div class="plan-warn">⚠️ ${firstShort ? firstShort.month : ''} 起資金不足，股票債券全賣也還差約 ${wan0(sim.shortfall)} 萬，請調整規劃。</div>`;
+  } else {
+    alertEl.innerHTML = `<div class="plan-ok">✅ 照目前規劃，剩下的房屋款 ${wan0(unpaid + (+p.closingCost||0) + (+p.reno||0))} 萬（含稅費、裝潢）都付得出來。</div>`;
+  }
+
+  const ordAfter = ordinary ? ordinary.net : 0;
+  document.getElementById('planKpis').innerHTML = [
+    planKpi('每月房貸', 'NT$ ' + fmt(sim.pmt), `${wan0(p.loan)} 萬・${(p.rate*100).toFixed(2)}%・${p.years} 年`),
+    planKpi(`交屋前總資產（${before.month}）`, wan0(before.total) + ' 萬', `現金 ${wan0(before.cash)} 萬・債券 ${wan0(before.bonds)} 萬`),
+    planKpi('交屋後一般月份結餘', `<span class="${ordAfter>=0?'delta-up':'delta-down'}">${ordAfter>=0?'+':''}${fmt(ordAfter)}</span>`,
+      `已扣定期定額；年終平均分攤後 ${ordAfter+bonusAvg>=0?'+':''}${fmt(ordAfter + bonusAvg)}`),
+    planKpi(`${lastYear.month} 總資產`, wan0(lastYear.total) + ' 萬', `房貸佔月薪 ${(pctSalary*100).toFixed(0)}%`),
+    planKpi('下一筆付款', next ? `${wan0(next.amount)} 萬` : '—', next ? `${next.month}・${next.label}` : '全部付清'),
+  ].join('');
+
+  // 付款進度
+  const soldNote = r => !r ? '—' : r.cash < 0 ? '<span class="delta-up">資金不足</span>' : r.sold > 1 ? `需動用投資約 ${wan0(r.sold)} 萬` : '現金足夠';
+  const items = (p.payments || []).map(x => ({ month:x.month, label:x.label, amount:+x.amount||0, paid:!!x.paid }));
+  if(+p.closingCost || +p.reno) items.push({ month:p.delivery, label:'交屋稅費＋裝潢（估）', amount:(+p.closingCost||0)+(+p.reno||0), paid:false });
+  if(p.pledge > 0) items.push({ month:p.pledgeDue, label:'質押到期還款', amount:p.pledge*(1+p.pledgeRate), paid:false });
+  items.sort((a,b) => ymIdx(a.month) - ymIdx(b.month));
+  const payHtml = items.map(x =>
+    `<tr class="${x.paid?'paid':''}"><td>${x.month}</td><td style="text-align:left;">${x.label}</td><td>${wan0(x.amount)} 萬</td><td>${x.paid ? '已付' : soldNote(at(Math.max(ymIdx(x.month), sim.start)))}</td></tr>`
+  ).join('');
+  document.getElementById('planPayBody').innerHTML = payHtml;
+
+  // 每年
+  const years = {};
+  R.forEach(r => {
+    const d = years[r.y] || (years[r.y] = { salary:0, rsu:0, divCash:0, tax:0, living:0, dca:0, house:0, pledge:0, mort:0, net:0, total:0 });
+    d.salary += r.salary - r.insurance; d.rsu += r.rsu; d.divCash += r.divCash; d.tax += r.tax; d.living += r.living;
+    d.dca += r.dca; d.house += r.house; d.pledge += r.pledgeRepay; d.mort += r.mort; d.net += r.net; d.total = r.total;
+  });
+  const cls = v => v < 0 ? 'delta-down' : '';
+  document.getElementById('planYearBody').innerHTML = Object.entries(years).map(([y,d]) =>
+    `<tr><td>${y}</td><td>${wan(d.salary)}</td><td>${wan(d.rsu)}</td><td>${wan(d.divCash)}</td><td>${wan(d.tax)}</td><td>${wan(d.living)}</td><td>${wan(d.dca)}</td><td>${wan(d.house)}</td><td>${wan(d.pledge)}</td><td>${wan(d.mort)}</td><td class="${cls(d.net)}">${wan(d.net)}</td><td>${wan0(d.total)}</td></tr>`
+  ).join('');
+
+  // 每月
+  document.getElementById('planMonthBody').innerHTML = R.map(r =>
+    `<tr class="${r.m===12?'yr':''}"><td>${r.month}</td><td>${fmt(r.salary - r.insurance)}</td><td>${fmt(r.rsuCash)}</td><td>${fmt(r.divCash)}</td><td>${fmt(-r.tax)}</td><td>${fmt(-r.living)}</td><td>${fmt(-r.dca)}</td><td>${fmt(-r.house)}</td><td>${fmt(-r.pledgeRepay)}</td><td>${fmt(-r.mort)}</td><td class="${r.net<0?'delta-down':'delta-up'}">${fmt(r.net)}</td><td>${r.sold>1?fmt(r.sold):'-'}</td><td class="${cls(r.cash)}">${fmt(r.cash)}</td></tr>`
+  ).join('');
+
+  renderPlanChart(R);
+}
+
+function renderPlanChart(R){
+  const el = document.getElementById('planChart');
+  if(!el || typeof Chart === 'undefined') return;
+  const labels = R.map(r => r.month);
+  const ds = [
+    { label:'股票', data:R.map(r => Math.round(r.equity)), backgroundColor:'rgba(201,162,39,0.35)', borderColor:'#C9A227', fill:true, stack:'a' },
+    { label:'債券', data:R.map(r => Math.round(r.bonds)), backgroundColor:'rgba(91,141,239,0.35)', borderColor:'#5B8DEF', fill:true, stack:'a' },
+    { label:'現金', data:R.map(r => Math.round(Math.max(r.cash,0))), backgroundColor:'rgba(47,179,128,0.35)', borderColor:'#2FB380', fill:true, stack:'a' },
+    { label:'淨資產', data:R.map(r => Math.round(r.total)), borderColor:'#E8EAED', backgroundColor:'transparent', fill:false, borderWidth:2, stack:'b' },
+  ];
+  if(planChart){
+    planChart.data.labels = labels;
+    planChart.data.datasets.forEach((d,i) => d.data = ds[i].data);
+    planChart.update('none');
+    return;
+  }
+  planChart = new Chart(el.getContext('2d'), {
+    type:'line',
+    data:{ labels, datasets: ds.map(d => ({ ...d, pointRadius:0, borderWidth:d.borderWidth || 1.5, tension:0 })) },
+    options:{
+      responsive:true, maintainAspectRatio:false, interaction:{ mode:'index', intersect:false },
+      scales:{
+        x:{ ticks:{ color:'#8B93A7', maxTicksLimit:7 }, grid:{ color:'rgba(35,43,61,0.6)' } },
+        y:{ stacked:true, ticks:{ color:'#8B93A7', callback:v => (v/1e4).toLocaleString('en-US') + '萬' }, grid:{ color:'rgba(35,43,61,0.6)' } },
+      },
+      plugins:{
+        legend:{ labels:{ color:'#8B93A7', boxWidth:10 } },
+        tooltip:{ callbacks:{ label:c => `${c.dataset.label}：${(c.parsed.y/1e4).toLocaleString('en-US',{maximumFractionDigits:0})} 萬` } },
+      },
+    },
+  });
+}
+
+// ---- 設定表單 ----
+function renderPlanForm(){
+  const form = document.getElementById('planForm');
+  if(!form) return;
+  const p = planCfg();
+  form.innerHTML = PLAN_FIELDS.map(([label, key, type]) => {
+    if(type === 'bool') return `<label class="chk"><input type="checkbox" data-plan="${key}" ${p[key]?'checked':''}>${label}</label>`;
+    const val = type === 'pct' ? +(p[key]*100).toFixed(3) : p[key];
+    const attrs = type === 'month' ? 'type="month"' : 'type="text" inputmode="decimal"';
+    return `<label>${label}${type==='pct'?' (%)':''}<input ${attrs} data-plan="${key}" data-type="${type}" value="${val}"></label>`;
+  }).join('');
+  renderPlanPayEdit();
+}
+function renderPlanPayEdit(){
+  const p = planCfg();
+  document.getElementById('planPayEdit').innerHTML = p.payments.map((x, i) =>
+    `<tr><td><input type="month" data-pay="${i}" data-f="month" value="${x.month}"></td>
+     <td><input type="text" data-pay="${i}" data-f="label" value="${String(x.label).replace(/"/g,'&quot;')}"></td>
+     <td><input type="text" inputmode="decimal" data-pay="${i}" data-f="amount" value="${x.amount}"></td>
+     <td style="text-align:center;"><input type="checkbox" data-pay="${i}" data-f="paid" ${x.paid?'checked':''}></td>
+     <td><button class="btn-ghost btn-small" type="button" data-pay-del="${i}">✕</button></td></tr>`
+  ).join('');
+}
+function onPlanInput(e){
+  const t = e.target;
+  const p = planCfg();
+  if(t.dataset.plan){
+    const key = t.dataset.plan, type = t.dataset.type;
+    if(t.type === 'checkbox') p[key] = t.checked;
+    else if(type === 'month') p[key] = t.value;
+    else { const v = parseFloat(String(t.value).replace(/,/g,'')); if(isNaN(v)) return; p[key] = type === 'pct' ? v/100 : v; }
+  } else if(t.dataset.pay !== undefined){
+    const x = p.payments[+t.dataset.pay]; if(!x) return;
+    const f = t.dataset.f;
+    if(f === 'paid') x.paid = t.checked;
+    else if(f === 'amount'){ const v = parseFloat(String(t.value).replace(/,/g,'')); if(isNaN(v)) return; x.amount = v; }
+    else x[f] = t.value;
+  } else return;
+  renderPlan();
+}
+function setupPlan(){
+  const card = document.getElementById('planCard');
+  if(!card || card.dataset.ready) return;
+  card.dataset.ready = '1';
+  card.addEventListener('input', onPlanInput);
+  card.addEventListener('change', onPlanInput);
+  card.addEventListener('click', async e => {
+    const del = e.target.closest('[data-pay-del]');
+    if(del){ planCfg().payments.splice(+del.dataset.payDel, 1); renderPlanPayEdit(); renderPlan(); return; }
+    if(e.target.id === 'planAddPay'){
+      planCfg().payments.push({ month: ymLabel(new Date().getFullYear()*12 + new Date().getMonth()), label:'新付款', amount:0, paid:false });
+      renderPlanPayEdit(); renderPlan(); return;
+    }
+    if(e.target.id === 'planResetBtn'){
+      if(!confirm('確定把購屋規劃還原成預設值嗎？')) return;
+      state.plan = JSON.parse(JSON.stringify(PLAN_DEFAULT));
+      renderPlanForm(); renderPlan(); return;
+    }
+    if(e.target.id === 'planSaveBtn'){
+      const msg = document.getElementById('planMsg');
+      msg.textContent = '⏳ 儲存中...'; msg.style.opacity = 1;
+      await saveToCloud(false);
+      msg.textContent = '✅ 已儲存'; setTimeout(() => msg.style.opacity = 0, 2500);
+    }
+  });
+  renderPlanForm();
+}
+
+
+// ---- 分頁：資產配置 / 購屋規劃（網址 #plan） ----
+function showView(){
+  const plan = location.hash === '#plan';
+  document.getElementById('viewMain').style.display = plan ? 'none' : '';
+  document.getElementById('viewPlan').style.display = plan ? '' : 'none';
+  document.querySelectorAll('.page-tab').forEach(t => t.classList.toggle('active', (t.dataset.view === 'plan') === plan));
+  document.getElementById('pageTitle').textContent = plan ? '購屋財務規劃' : '資產配置與走勢';
+  document.getElementById('pageSub').textContent = plan ? '潤泰峘翠 A3-25F・用目前持股與即時股價推估到交屋' : '台股 + 美股持倉整合檢視';
+  document.title = plan ? '購屋財務規劃' : '資產配置與走勢追蹤';
+  if(plan && planChart) requestAnimationFrame(() => planChart.resize());
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll('.page-tab').forEach(t => t.addEventListener('click', e => {
+  e.preventDefault();
+  window.history.replaceState(null, '', t.dataset.view === 'plan' ? '#plan' : location.pathname + location.search);
+  showView();
+}));
+window.addEventListener('hashchange', showView);
+showView();
+
 async function initApp(){
   await loadFromCloud();
   const migrated = migrateRoles();
+  setupPlan();
   document.getElementById('fxRate').value = state.fx || 31.5;
   fullRender();
   if(migrated){ upsertDailyRecord(); renderHistory(); saveToCloud(false); }
