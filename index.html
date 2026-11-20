@@ -1697,17 +1697,18 @@ const PLAN_DEFAULT = {
   dca009816:30000, dca00687B:10000,
   cash:2400000, pledge:1500000, pledgeRate:0.02, pledgeDue:'2027-04',
   eqGrowth:0.05, smciGrowth:0, cashRate:0.015, rsuBondYield:0.045,
-  loan:21673000, rate:0.025, years:35, delivery:'2030-12', firstPay:'2031-01',
+  loan:22030000, rate:0.025, years:35, delivery:'2030-12', firstPay:'2031-01',
   closingCost:600000, reno:1500000, stopReinvestAfterDelivery:false,
+  scheduleVer:2,   // 2026/11/20 付款表：A3-25F 2,648 萬＋車位 B2-191 290 萬＝2,938 萬
   payments:[
-    { month:'2026-11', label:'定金', amount:100000, paid:true },
-    { month:'2026-11', label:'簽約金', amount:1923000, paid:false },
-    { month:'2027-03', label:'工程款 1・七樓底版', amount:569000, paid:false },
-    { month:'2027-09', label:'工程款 2・十六樓底版', amount:569000, paid:false },
-    { month:'2028-03', label:'工程款 3・二十三樓底版', amount:864000, paid:false },
-    { month:'2028-08', label:'工程款 4・屋頂底版', amount:864000, paid:false },
-    { month:'2029-06', label:'工程款 5・申請使照', amount:894000, paid:false },
-    { month:'2030-12', label:'交屋款 5%', amount:1453000, paid:false },
+    { month:'2026-11', label:'定金（已付）', amount:100000, paid:true },
+    { month:'2026-11', label:'定金＋簽約金（餘額）', amount:1940000, paid:false },
+    { month:'2027-03', label:'工程款 1・七樓底版', amount:590000, paid:false },
+    { month:'2027-09', label:'工程款 2・十六樓底版', amount:590000, paid:false },
+    { month:'2028-03', label:'工程款 3・二十三樓底版', amount:890000, paid:false },
+    { month:'2028-08', label:'工程款 4・屋頂底版', amount:890000, paid:false },
+    { month:'2029-06', label:'工程款 5・申請使照', amount:880000, paid:false },
+    { month:'2030-12', label:'交屋款 5%', amount:1470000, paid:false },
   ]
 };
 
@@ -1736,6 +1737,14 @@ let planChart = null;
 
 function planCfg(){
   if(!state.plan || typeof state.plan !== 'object') state.plan = JSON.parse(JSON.stringify(PLAN_DEFAULT));
+  // 付款表改版：換成新的付款表與貸款金額，保留「簽約金」已付的勾選
+  if((state.plan.scheduleVer || 1) < PLAN_DEFAULT.scheduleVer){
+    const signPaid = (state.plan.payments || []).some(x => x.paid && /簽約/.test(x.label || ''));
+    state.plan.payments = JSON.parse(JSON.stringify(PLAN_DEFAULT.payments));
+    if(signPaid) state.plan.payments.forEach(x => { if(/簽約/.test(x.label)) x.paid = true; });
+    state.plan.loan = PLAN_DEFAULT.loan;
+    state.plan.scheduleVer = PLAN_DEFAULT.scheduleVer;
+  }
   for(const k in PLAN_DEFAULT){ if(state.plan[k] === undefined) state.plan[k] = JSON.parse(JSON.stringify(PLAN_DEFAULT[k])); }
   return state.plan;
 }
