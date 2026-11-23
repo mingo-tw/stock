@@ -113,7 +113,17 @@ def fetch_firstrade() -> list[dict]:
         save_session=True,
         profile_path=env("FT_PROFILE_PATH", ".ft_session"),
     )
-    need_code = ss.login()
+    # Firstrade 伺服器忙碌（例如美股開盤時）會回 502/503/504，自動等一下再試，最多 3 次
+    for attempt in range(1, 4):
+        try:
+            need_code = ss.login()
+            break
+        except Exception as e:  # noqa: BLE001
+            busy = any(f"status code: {c}" in str(e) for c in (502, 503, 504))
+            if not busy or attempt == 3:
+                raise
+            log(f"   Firstrade 伺服器忙碌（{e}），{15 * attempt} 秒後重試（第 {attempt} 次）")
+            time.sleep(15 * attempt)
     if need_code:
         if sys.stdin.isatty():
             ss.login_two(input("Firstrade 驗證碼（Email/簡訊）: ").strip())
