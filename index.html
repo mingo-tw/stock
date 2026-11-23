@@ -235,6 +235,9 @@
   .sess-live::before{content:'● ';font-size:8px;}
   .sync-err{color:var(--gain);}
   
+  .chg-pct{display:block;font-weight:600;white-space:nowrap;}
+  .chg-amt{display:block;font-size:11px;opacity:.85;white-space:nowrap;}
+  .chg-none{color:var(--text-dim);}
   .day-chg{display:block;font-size:11px;margin-top:2px;white-space:nowrap;}
   .hero-split{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:12px;font-size:12.5px;color:var(--text-dim);}
   .hero-split b{font-weight:600;margin-left:4px;}
@@ -417,6 +420,7 @@
             <th>股數</th>
             <th>平均成本</th>
             <th>現價</th>
+            <th>今日漲幅</th>
             <th>市值</th>
             <th>損益</th>
             <th></th>
@@ -447,6 +451,7 @@
             <th>股數/口數</th>
             <th>平均成本</th>
             <th>現價</th>
+            <th>今日漲幅</th>
             <th>市值</th>
             <th>損益</th>
             <th></th>
@@ -775,7 +780,16 @@ const signed = (v, d = 0) => (v >= 0 ? '+' : '') + (d ? v.toFixed(d) : fmt(v));
 function dayChgHtml(h, sym){
   const d = dayChangeOf(h);
   if(!d) return '';
-  return `<span class="day-chg ${d.amt >= 0 ? 'delta-up' : 'delta-down'}">今日 ${d.amt >= 0 ? '+' : '-'}${sym}${fmt(Math.abs(d.amt))} (${signed(d.pct, 2)}%)</span>`;
+  return `<span class="day-chg ${d.amt >= 0 ? 'delta-up' : 'delta-down'}">今日 ${d.amt >= 0 ? '+' : '-'}${sym}${fmt(Math.abs(d.amt))}</span>`;
+}
+// 每檔「今日漲幅」欄：漲跌幅 % 為主，下方小字為股價漲跌
+function dayPctHtml(h){
+  const d = dayChangeOf(h);
+  if(!d) return '<span class="chg-none">—</span>';
+  const diff = h.price - h.prevClose;
+  const cls = diff > 0 ? 'delta-up' : diff < 0 ? 'delta-down' : '';
+  const arrow = diff > 0 ? '▲' : diff < 0 ? '▼' : '';
+  return `<span class="chg-pct ${cls}">${arrow}${signed(d.pct, 2)}%</span><span class="chg-amt ${cls}">${diff >= 0 ? '+' : ''}${(+diff.toFixed(4)).toLocaleString('en-US', {maximumFractionDigits: 2})}</span>`;
 }
 
 // ---- 每日資產紀錄 ----
@@ -815,7 +829,7 @@ function renderTable(bodyId, holdings, currencySymbol, market){
   const body = document.getElementById(bodyId);
   body.innerHTML = '';
   if(!holdings.length){
-    body.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:12px;">尚無持倉</td></tr>`;
+    body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:12px;">尚無持倉</td></tr>`;
     return;
   }
   holdings.forEach((h)=>{
@@ -833,6 +847,7 @@ function renderTable(bodyId, holdings, currencySymbol, market){
       <td style="text-align:right;"><input class="qty-input" type="text" inputmode="decimal" value="${h.qty}" data-market="${market}" data-id="${h.id}" data-field="qty" autocomplete="off"></td>
       <td style="text-align:right;"><input class="avgcost-input" type="text" inputmode="decimal" value="${h.avgCost || 0}" data-market="${market}" data-id="${h.id}" data-field="avgCost" autocomplete="off"></td>
       <td style="text-align:right;"><input class="price-input" type="text" inputmode="decimal" value="${h.price}" data-market="${market}" data-id="${h.id}" data-field="price" autocomplete="off">${sessionBadge(h)}</td>
+      <td style="text-align:right;" class="chg-cell">${dayPctHtml(h)}</td>
       <td style="text-align:right;" class="val-cell">${currencySymbol}${fmt(value)}${dayChgHtml(h, currencySymbol)}</td>
       <td style="text-align:right;" class="pnl-cell ${pnlClass}">${pnl>=0?'+':''}${fmt(pnl)} (${pnlPct.toFixed(1)}%)</td>
       <td style="text-align:right;"><button class="remove-btn" type="button" data-market="${market}" data-id="${h.id}">✕</button></td>
@@ -856,6 +871,8 @@ function updateSingleRowAndHeader(market, id){
     
     const valCell = tr.querySelector('.val-cell');
     const pnlCell = tr.querySelector('.pnl-cell');
+    const chgCell = tr.querySelector('.chg-cell');
+    if(chgCell) chgCell.innerHTML = dayPctHtml(h);
     if(valCell) valCell.innerHTML = `${symbol}${fmt(value)}${dayChgHtml(h, symbol)}`;
     if(pnlCell){
       pnlCell.textContent = `${pnl>=0?'+':''}${fmt(pnl)} (${pnlPct.toFixed(1)}%)`;
