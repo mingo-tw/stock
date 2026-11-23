@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import time
 import json
 import os
 import re
@@ -168,7 +169,22 @@ def fetch_shioaji() -> list[dict]:
     try:
         # Unit.Share → 數量以「股」為單位（含零股），和網站上的股數一致
         Unit = getattr(sj, "Unit", None) or sj.constant.Unit
-        positions = api.list_positions(account=api.stock_account, unit=Unit.Share)
+        # 永豐伺服器偶爾回應很慢（逾時），自動重試 3 次、每次最多等 60 秒
+        positions, last_err = None, None
+        for attempt in range(1, 4):
+            try:
+                try:
+                    positions = api.list_positions(account=api.stock_account, unit=Unit.Share, timeout=60000)
+                except TypeError:  # 舊版 shioaji 沒有 timeout 參數
+                    positions = api.list_positions(account=api.stock_account, unit=Unit.Share)
+                break
+            except Exception as e:  # noqa: BLE001
+                last_err = e
+                log(f"   永豐查詢持股逾時/失敗（第 {attempt} 次）：{e}")
+                if attempt < 3:
+                    time.sleep(5 * attempt)
+        if positions is None:
+            raise last_err
         merged: dict[str, dict] = {}
         for p in positions:
             code = str(p.code).strip().upper()
