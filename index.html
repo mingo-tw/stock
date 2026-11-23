@@ -127,10 +127,12 @@
     word-break: break-all;
   }
   .hero-row{display:flex;gap:16px;flex-wrap:wrap;margin-top:16px;}
-  .hero-stat{font-size:12.5px;color:var(--text-dim);flex: 1 1 30%;min-width: 100px;}
+  .hero-stat{font-size:12.5px;color:var(--text-dim);flex: 1 1 20%;min-width: 120px;}
   .hero-stat b{color:var(--text);font-weight:600;display:block;font-size:15px;margin-top:2px;}
   .delta-up{color:var(--gain);}
   .delta-down{color:var(--loss);}
+  .hero-stat b.delta-up{color:var(--gain);}
+  .hero-stat b.delta-down{color:var(--loss);}
 
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
   @media (max-width:720px){.grid2{grid-template-columns:1fr;}}
@@ -233,6 +235,11 @@
   .sess-live::before{content:'● ';font-size:8px;}
   .sync-err{color:var(--gain);}
   
+  .day-chg{display:block;font-size:11px;margin-top:2px;white-space:nowrap;}
+  .hero-split{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:12px;font-size:12.5px;color:var(--text-dim);}
+  .hero-split b{font-weight:600;margin-left:4px;}
+  .hero-split small{margin-left:4px;font-size:11px;}
+  .hero-split .hero-note{flex-basis:100%;font-size:11px;opacity:.8;}
   .profit-table{width:100%;border-collapse:collapse;font-size:12.5px;white-space:nowrap;}
   .profit-table th{position:sticky;top:0;background:var(--surface);color:var(--text-dim);font-weight:500;text-align:right;padding:6px 8px;border-bottom:1px solid rgba(139,147,167,.25);}
   .profit-table td{text-align:right;padding:6px 8px;border-bottom:1px solid rgba(139,147,167,.12);}
@@ -333,10 +340,12 @@
     <div class="hero-label">總資產淨值（換算新台幣）</div>
     <div class="hero-value" id="heroTotal">—</div>
     <div class="hero-row">
-      <div class="hero-stat">較前一日<b id="deltaSinceLast">—</b></div>
+      <div class="hero-stat">今日漲跌<b id="dayChange">—</b></div>
+      <div class="hero-stat">較上次紀錄<b id="deltaSinceLast">—</b></div>
       <div class="hero-stat">未實現損益<b id="totalPnl">—</b></div>
       <div class="hero-stat">已記錄天數<b id="snapshotCount">0</b></div>
     </div>
+    <div class="hero-split" id="dayChangeSplit"></div>
   </div>
 
   <div class="grid2">
@@ -749,6 +758,26 @@ function computeTotals(){
   return { twValue, twCost, usValueUSD, usCostUSD, totalValue, totalCost, equityTWD, bondTWD, roles };
 }
 
+// ---- 今日漲跌（現價 vs 前一交易日收盤）----
+function dayChangeOf(h){
+  if(!(h.prevClose > 0) || !(h.price > 0)) return null;
+  const qty = h.qty || 0;
+  return { amt: qty * (h.price - h.prevClose), base: qty * h.prevClose, pct: (h.price / h.prevClose - 1) * 100 };
+}
+function computeDayChange(){
+  const fx = state.fx || 31.5;
+  const sum = list => list.reduce((a, h) => { const d = dayChangeOf(h); if(d){ a.amt += d.amt; a.base += d.base; a.n++; } return a; }, {amt:0, base:0, n:0});
+  const tw = sum(state.tw), us = sum(state.us);
+  const amt = tw.amt + us.amt * fx, base = tw.base + us.base * fx;
+  return { tw, us, amt, pct: base ? amt / base * 100 : 0, n: tw.n + us.n };
+}
+const signed = (v, d = 0) => (v >= 0 ? '+' : '') + (d ? v.toFixed(d) : fmt(v));
+function dayChgHtml(h, sym){
+  const d = dayChangeOf(h);
+  if(!d) return '';
+  return `<span class="day-chg ${d.amt >= 0 ? 'delta-up' : 'delta-down'}">今日 ${d.amt >= 0 ? '+' : '-'}${sym}${fmt(Math.abs(d.amt))} (${signed(d.pct, 2)}%)</span>`;
+}
+
 // ---- 每日資產紀錄 ----
 function todayStr(){
   const d = new Date(), p = n => String(n).padStart(2,'0');
@@ -804,7 +833,7 @@ function renderTable(bodyId, holdings, currencySymbol, market){
       <td style="text-align:right;"><input class="qty-input" type="text" inputmode="decimal" value="${h.qty}" data-market="${market}" data-id="${h.id}" data-field="qty" autocomplete="off"></td>
       <td style="text-align:right;"><input class="avgcost-input" type="text" inputmode="decimal" value="${h.avgCost || 0}" data-market="${market}" data-id="${h.id}" data-field="avgCost" autocomplete="off"></td>
       <td style="text-align:right;"><input class="price-input" type="text" inputmode="decimal" value="${h.price}" data-market="${market}" data-id="${h.id}" data-field="price" autocomplete="off">${sessionBadge(h)}</td>
-      <td style="text-align:right;" class="val-cell">${currencySymbol}${fmt(value)}</td>
+      <td style="text-align:right;" class="val-cell">${currencySymbol}${fmt(value)}${dayChgHtml(h, currencySymbol)}</td>
       <td style="text-align:right;" class="pnl-cell ${pnlClass}">${pnl>=0?'+':''}${fmt(pnl)} (${pnlPct.toFixed(1)}%)</td>
       <td style="text-align:right;"><button class="remove-btn" type="button" data-market="${market}" data-id="${h.id}">✕</button></td>
     `;
@@ -827,7 +856,7 @@ function updateSingleRowAndHeader(market, id){
     
     const valCell = tr.querySelector('.val-cell');
     const pnlCell = tr.querySelector('.pnl-cell');
-    if(valCell) valCell.textContent = `${symbol}${fmt(value)}`;
+    if(valCell) valCell.innerHTML = `${symbol}${fmt(value)}${dayChgHtml(h, symbol)}`;
     if(pnlCell){
       pnlCell.textContent = `${pnl>=0?'+':''}${fmt(pnl)} (${pnlPct.toFixed(1)}%)`;
       pnlCell.className = `pnl-cell ${pnlClass}`;
@@ -845,6 +874,25 @@ function updateGlobalDisplaysOnly(){
   const pnlEl = document.getElementById('totalPnl');
   pnlEl.textContent = (pnl>=0?'+':'') + 'NT$' + fmt(pnl);
   pnlEl.className = pnl>=0 ? 'delta-up':'delta-down';
+
+  const dc = computeDayChange();
+  const dcEl = document.getElementById('dayChange');
+  const splitEl = document.getElementById('dayChangeSplit');
+  if(dc.n){
+    dcEl.textContent = `${dc.amt>=0?'+':'-'}NT$${fmt(Math.abs(dc.amt))} (${signed(dc.pct, 2)}%)`;
+    dcEl.className = dc.amt >= 0 ? 'delta-up' : 'delta-down';
+    const part = (label, a, sym, rate) => {
+      if(!a.n) return '';
+      const pct = a.base ? a.amt / a.base * 100 : 0;
+      const twd = a.amt * rate;
+      return `<span>${label}今日 <b class="${a.amt>=0?'delta-up':'delta-down'}">${twd>=0?'+':'-'}NT$${fmt(Math.abs(twd))} (${signed(pct, 2)}%)</b>${sym ? `<small>（${a.amt>=0?'+':'-'}US$${fmt(Math.abs(a.amt))}）</small>` : ''}</span>`;
+    };
+    splitEl.innerHTML = part('台股', dc.tw, '', 1) + part('美股', dc.us, 'US$', state.fx || 31.5)
+      + '<span class="hero-note">現價 vs 前一交易日收盤（美股含盤前／盤後）</span>';
+  } else {
+    dcEl.textContent = '—'; dcEl.className = '';
+    splitEl.innerHTML = '<span class="hero-note">更新股價後顯示今日漲跌</span>';
+  }
 
   const prev = previousDayRecord();
   const deltaEl = document.getElementById('deltaSinceLast');
@@ -1467,7 +1515,7 @@ async function fetchTwLive(live = {}){
   // 0) 即時報價（轉接站）
   codes.forEach(c => {
     const q = live[c];
-    if(q && q.price > 0){ priceByCode[c] = q.price; metaByCode[c] = { session: q.session, time: q.time }; }
+    if(q && q.price > 0){ priceByCode[c] = q.price; metaByCode[c] = { session: q.session, time: q.time, prevClose: q.prevClose }; }
   });
 
   // 1) 沒拿到即時的，用 FinMind 收盤價
@@ -1507,6 +1555,7 @@ async function fetchTwLive(live = {}){
       const m = metaByCode[c];
       h.priceSession = m ? m.session : 'fallback';
       h.priceTime = m ? m.time : null;
+      h.prevClose = (m && m.prevClose > 0) ? m.prevClose : null;  // 今日漲跌用
     }
     else failed.push(h.name || h.code);
   });
@@ -1522,6 +1571,7 @@ async function fetchUsLive(live = {}){
     const q = live[normCode(h.code)];
     if(q && q.price > 0){
       h.price = q.price; h.priceSession = q.session; h.priceTime = q.time;
+      h.prevClose = q.prevClose > 0 ? q.prevClose : null;  // 今日漲跌用
       updated++;
       return;
     }
@@ -1537,7 +1587,7 @@ async function fetchUsLive(live = {}){
     }
     if(Number.isFinite(price) && price > 0){
       h.price = price;
-      h.priceSession = 'fallback'; h.priceTime = null;
+      h.priceSession = 'fallback'; h.priceTime = null; h.prevClose = null;
       updated++;
     }else{
       failed.push(h.name || h.code);
