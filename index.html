@@ -1257,6 +1257,7 @@ async function saveToCloud(syncFromInputs = true, auto = false){
         fullRender();
         msg.textContent = '已自動載入最新券商同步資料（' + fmtSyncTime(remoteT) + '）';
         setTimeout(()=>msg.style.opacity = 0, 4000);
+        refreshPricesAndRecord(true, false);  // 券商資料沒有昨收價，馬上重抓即時報價，今日漲幅才不會變成「—」
         return;
       }
       if(remoteT && remoteT > localT){
