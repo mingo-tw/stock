@@ -1235,7 +1235,7 @@ function syncInputsToStateInMemory(){
   state.fx = parseFloat(document.getElementById('fxRate').value) || 31.5;
 }
 
-async function saveToCloud(syncFromInputs = true){
+async function saveToCloud(syncFromInputs = true, auto = false){
   // 一般按「儲存」時才從畫面 input 同步資料。
   // 線上更新股價後不能再同步舊的 DOM 值，否則會把剛抓到的新價格覆蓋掉。
   if(syncFromInputs) syncInputsToStateInMemory();
@@ -1250,6 +1250,15 @@ async function saveToCloud(syncFromInputs = true){
       const remote = (await r.json()).record || {};
       const remoteT = remote.state?.lastSync?.time || '';
       const localT = state.lastSync?.time || '';
+      if(remoteT && remoteT > localT && auto){
+        // 自動存檔時發現雲端有較新的券商同步資料：直接載入最新資料，不覆蓋、不跳視窗
+        await loadFromCloud();
+        document.getElementById('fxRate').value = state.fx || 31.5;
+        fullRender();
+        msg.textContent = '已自動載入最新券商同步資料（' + fmtSyncTime(remoteT) + '）';
+        setTimeout(()=>msg.style.opacity = 0, 4000);
+        return;
+      }
       if(remoteT && remoteT > localT){
         if(confirm('雲端有較新的券商同步資料（' + fmtSyncTime(remoteT) + '）。\n按「確定」重新載入最新資料（建議），按「取消」仍用目前畫面覆蓋。')){
           await loadFromCloud();
@@ -1643,7 +1652,7 @@ async function refreshPricesAndRecord(auto = false, save = true){
 
   // 重新 render 顯示新價格，再存雲端（不再從舊 input 同步，避免覆蓋）
   fullRender();
-  if(ok && save) await saveToCloud(false);
+  if(ok && save) await saveToCloud(false, auto);
 
   const twTotal = state.tw.filter(h => isTwCode(h.code)).length;
 
